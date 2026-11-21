@@ -18,7 +18,7 @@
 - Rust stable + Cargo workspace, tokio, serde, tracing, axum(로컬 HTTP API); SQLite는 영속 메타데이터에만.
 - TorrentBackend 추상화 → **librqbit(순수 Rust)** 또는 **libtorrent 2.x(C++ FFI)** 중 **Phase 02**에서 측정 후 결정. 알려지지 않은 바인딩/기능을 가정하지 않는다.
 - FFmpeg/ffprobe subprocess 기반으로 시작. macOS는 VideoToolbox 하드웨어 경로를 계측하고, Linux는 CPU/설치된 인코더로 안전 폴백.
-- M5 macOS 네이티브 실행 + 기존 GitLab Linux ARM64 Docker Runner에서 독립적인 CI. 사용자 UI는 먼저 브라우저/localhost, GPUI는 별도 선택 사항.
+- M5 macOS 네이티브 실행 + **GitHub Actions만으로 Rust·FFmpeg CI**. GitLab은 코드 원본과 GitHub Actions 요청·상태 중계만 담당. 사용자 UI는 먼저 브라우저/localhost, GPUI는 별도 선택 사항.
 - Docker는 Linux daemon 배포용이다. macOS Docker 컨테이너에서 VideoToolbox 사용이 가능하다고 가정하지 않는다.
 
 ## 실행 순서 / 종속성
@@ -26,7 +26,7 @@
 | Phase | 문서 | 산출물 / 차단 게이트 |
 |---|---|---|
 | 00 | [제품 정의](phases/00-SCOPE.md) | 비목표, 권리 범위, SLO, 테스트 픽스처 확정 |
-| 01 | [개발 기반](phases/01-FOUNDATION.md) | Cargo workspace + Runner의 Rust 검증 |
+| 01 | [개발 기반](phases/01-FOUNDATION.md) | Cargo workspace + GitHub Actions Rust 검증 |
 | 02 | [토렌트 엔진](phases/02-TORRENT-BACKEND.md) | 두 후보 중 1개 선택, piece read + SHA 확인 |
 | 03 | [피어·스웜 검색](phases/03-DISCOVERY.md) | 피어 측정, 제약 있는 multi-swarm 등록 |
 | 04 | [피스 예약·버퍼](phases/04-STREAM-SCHEDULER.md) | 단일 소스 재생·seek·복구 |
@@ -46,7 +46,8 @@
 - [데이터 모델·상태 전이·API 계약](DATA_CONTRACTS.md)
 - [테스트 매트릭스 및 실험 프로토콜](TEST_MATRIX.md)
 - [결정 기록과 기술 부채](DECISIONS.md)
-- [기존 Runner 검증](CI_RUNNER.md)
+- [현재 GitHub Actions 전용 CI](GITHUB_PARALLEL_CI.md)
+- [과거 GitLab Runner 검증 기록(현재 미사용)](CI_RUNNER.md)
 
 ## 단계 수행 규칙
 

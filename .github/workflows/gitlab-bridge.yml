@@ -82,7 +82,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
-        run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt,clippy
+        run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy
       - uses: Swatinem/rust-cache@v2
         with:
           key: github-clippy-rust100

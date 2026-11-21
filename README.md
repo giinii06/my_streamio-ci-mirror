@@ -128,13 +128,32 @@ Outstanding product-critical tasks:
 
 ## CI and contribution
 
-`.gitlab-ci.yml` uses an existing GitLab Runner named `Oracle-A1-ARM64`
-for smoke, Rust and synthetic offline-HLS checks. These jobs can be queued
-when the self-hosted Runner is busy. Linux CI cannot prove macOS VideoToolbox.
+**GitHub Actions is the only build/test CI provider.** The project does
+not use the Oracle ARM64 GitLab Runner, GitLab-hosted runners, or a
+repository `.gitlab-ci.yml`. GitLab is the **private source repository** and
+the place to request/observe a GitHub run, not where Rust or FFmpeg tests
+execute.
 
-All implementation work is currently in stacked **Draft merge requests**,
-not merged into `main`. Each Phase needs actual CI logs and real
-reproducible acceptance tests, not just a source commit.
+Current GitLab project CI setting is
+`.gitlab/ci-hub-request.yml@blond11qq/ci-hub-smoke`.
+That external configuration is a lightweight dispatch bridge: it
+triggers `giinii06/my_streamio-ci-mirror` GitHub Actions and reports a
+commit status back to GitLab. The corresponding controller workflow on
+the public GitHub mirror is `gitlab-request.yml`, which can run the
+central Rust `ci-hub` workflow and independent HLS/Clippy checks.
+
+To request the GitHub check on a GitLab feature branch, start an API
+pipeline for that ref through GitLab, then inspect the matching
+`github-actions/ci-hub-request` commit status and linked GitHub run.
+The request's success is **not automatically** proof that each
+Rust/HLS/Clippy job passed; verify those jobs in GitHub at the same SHA.
+
+[GitHub-only CI instructions](docs/GITHUB_PARALLEL_CI.md) ·
+[GitHub Actions runs](https://github.com/giinii06/my_streamio-ci-mirror/actions)
+
+All implementation work remains in stacked **Draft merge requests**,
+not merged into `main`. Each Phase requires reproducible acceptance
+evidence, not merely a workflow-dispatch success.
 
 ## Safety
 

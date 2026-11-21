@@ -1,3 +1,7 @@
+> **Superseded by [GitHub Actions-only plan](../github-actions-only/README.md).**
+> Historical investigation below describes the former dual-provider
+> intention; GitLab Runner verification is no longer in scope.
+
 # GitHub + GitLab parallel CI closeout — Alchemy poteto-mode
 
 Target: `blond11qq/my_streamio`, branch `ci/github-parallel-verification`, Draft MR !12. This is a continuation of `docs/GITHUB_PARALLEL_CI.md`; no merging, deployment, repository-visibility changes or mirror-setting changes are in scope.

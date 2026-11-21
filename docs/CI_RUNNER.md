@@ -1,3 +1,10 @@
+> **Historical reference only (superseded):** The project now uses GitHub
+> Actions exclusively for build/test. The GitLab Runner is NOT used in
+> the effective CI configuration and the repository `.gitlab-ci.yml`
+> has been removed. See [GitHub-only CI](GITHUB_PARALLEL_CI.md).
+>
+> The following records an earlier one-time bootstrap verification.
+
 # GitLab Runner bootstrap
 
 This repository starts with the `runner_smoke` job in `.gitlab-ci.yml`, before adding application build jobs.
