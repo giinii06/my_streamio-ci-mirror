@@ -94,10 +94,8 @@ fn validate_tracker(raw: &str) -> Result<()> {
     if host.eq_ignore_ascii_case("localhost") || host.ends_with(".localhost") {
         bail!("local tracker not allowed by default");
     }
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        if !ip.is_global() {
-            bail!("non-global tracker IP not allowed");
-        }
+    if host.parse::<IpAddr>().is_ok() {
+        bail!("tracker IP literals are disabled by default");
     }
     Ok(())
 }

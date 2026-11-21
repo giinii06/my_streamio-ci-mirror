@@ -1,7 +1,7 @@
 use axum::{
     extract::State,
     http::StatusCode,
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
 use my_streamio_torrent_adapter::TorrentBackend;
