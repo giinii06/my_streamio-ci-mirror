@@ -7,7 +7,7 @@ Experimental multi-swarm torrent streaming project.
 GitLab `main`에 푸시하면 보호된 `main`과 태그를 GitHub 공개 미러에 동기화합니다. 워크플로는 `main` 푸시에서 시작합니다. GitHub-hosted Runner가 중앙 `ci-hub` 워크플로에서 README의 공백 오류와 충돌 표시를 검사합니다. [GitHub Actions 실행 로그](https://github.com/giinii06/my_streamio-ci-mirror/actions/workflows/gitlab-bridge.yml)
 
 - 이전 실행을 다시 요청하려면 GitHub Actions에서 **Re-run jobs**를 선택합니다.
-- GitLab 커밋 상세에서 같은 SHA의 `github-actions/ci-hub` 상태를 확인합니다. GitHub의 호스팅된 컨트롤러가 5분 주기로 결과를 GitLab에 반영합니다.
+- GitLab 커밋 상세에서 같은 SHA의 `github-actions/ci-hub` 상태를 확인합니다. GitHub에서 완료하면 호스팅된 컨트롤러가 결과를 GitLab에 반영합니다.
 - Rust 코드를 `main`에 병합할 때 `Cargo.lock`을 커밋하고 [호출 워크플로](.github/workflows/gitlab-bridge.yml)의 `stack`을 `rust`로 지정합니다. 그러면 러너가 Rust 워크스페이스의 빌드와 테스트를 실행합니다.
 
 ### ChatGPT 웹에서 CI 요청
