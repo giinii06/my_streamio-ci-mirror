@@ -7,7 +7,7 @@
 //! must first establish that bytes are verified by their torrent metadata;
 //! this offline builder alone does not prove BitTorrent provenance.
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use my_streamio_timeline::Alignment;
 use sha2::{Digest, Sha256};
 use std::{
