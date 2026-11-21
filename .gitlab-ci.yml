@@ -19,6 +19,8 @@ runner_smoke:
     - test -f README.md
     - sh -n tests/fixtures/generate.sh
     - sh -n tests/integration/smoke.sh
+    - sh -n tests/integration/hls.sh
+    - bash -n scripts/benchmark_m5.sh
     - test -f docs/RELEASE_CHECKLIST.md
     - test -f docs/IMPLEMENTATION_STATUS.md
     - printf 'Runner ID %s executed commit %s\n' "$CI_RUNNER_ID" "$CI_COMMIT_SHORT_SHA"
