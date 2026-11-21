@@ -1,8 +1,8 @@
-pub mod hardware;
-
 //! Safely turn an already verified media file into an immutable video segment.
 //! This MVP worker produces H.264/1080p/24fps video only. It does NOT splice
 //! audio, prove scene identity, or transform an incomplete torrent file itself.
+
+pub mod hardware;
 
 use anyhow::{bail, Context, Result};
 use std::{

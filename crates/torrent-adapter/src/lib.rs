@@ -2,10 +2,11 @@
 //! Applications must never treat arbitrary local file reads as torrent-verified bytes.
 
 use anyhow::{anyhow, bail, Context, Result};
-use librqbit::{AddTorrent, Api, Session};
+use librqbit::{api::TorrentIdOrHash, AddTorrent, Api, Session};
 use my_streamio_domain::SwarmKey;
 use serde_json::Value;
-use std::{net::IpAddr, path::PathBuf};
+use std::{net::IpAddr, path::PathBuf, io::SeekFrom, time::Duration};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use url::Url;
 
 pub const MAX_MAGNET_BYTES: usize = 8192;
@@ -38,6 +39,54 @@ impl TorrentBackend {
     pub fn list_torrents(&self) -> Result<Value> {
         serde_json::to_value(self.api.api_torrent_list()).context("serializing torrent list")
     }
+
+    /// Return file metadata without disclosing host storage paths.
+    pub fn files(&self, torrent_id: usize) -> Result<Vec<PlayableFile>> {
+        let details = self.api
+            .api_torrent_details(TorrentIdOrHash::Id(torrent_id))
+            .context("torrent not available")?;
+        let files = details.files.context("torrent metadata unavailable")?;
+        Ok(files.into_iter().enumerate().map(|(id, file)| PlayableFile {
+            id,
+            name: file.name,
+            length: file.length,
+            included: file.included,
+        }).collect())
+    }
+
+    /// Read only bytes that librqbit has verified against the torrent pieces.
+    /// Never open incomplete torrent files through std::fs::File.
+    pub async fn read_verified_range(
+        &self, torrent_id: usize, file_id: usize, offset: u64, count: usize,
+    ) -> Result<Vec<u8>> {
+        if count == 0 || count > MAX_HTTP_CHUNK {
+            bail!("requested range exceeds cap");
+        }
+        let mut stream = self.api
+            .api_stream(TorrentIdOrHash::Id(torrent_id), file_id)
+            .await
+            .context("cannot open torrent file stream")?;
+        let read = async {
+            stream.seek(SeekFrom::Start(offset)).await?;
+            let mut bytes = vec![0; count];
+            stream.read_exact(&mut bytes).await?;
+            Ok::<Vec<u8>, std::io::Error>(bytes)
+        };
+        tokio::time::timeout(Duration::from_secs(20), read)
+            .await
+            .context("timed out waiting for verified pieces")?
+            .context("torrent stream ended early")
+    }
+}
+
+pub const MAX_HTTP_CHUNK: usize = 1024 * 1024;
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct PlayableFile {
+    pub id: usize,
+    pub name: String,
+    pub length: u64,
+    pub included: bool,
 }
 
 /// Validates a magnet before letting the native torrent engine contact any tracker.
