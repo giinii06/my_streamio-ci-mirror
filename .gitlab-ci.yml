@@ -21,6 +21,7 @@ runner_smoke:
     - sh -n tests/fixtures/generate.sh
     - sh -n tests/integration/smoke.sh
     - sh -n tests/integration/hls.sh
+    - apk add --no-cache bash
     - bash -n scripts/benchmark_m5.sh
     - test -f docs/RELEASE_CHECKLIST.md
     - test -f docs/IMPLEMENTATION_STATUS.md
