@@ -8,6 +8,9 @@ license.workspace = true
 my-streamio-domain = { path = "../../crates/domain" }
 my-streamio-torrent-adapter = { path = "../../crates/torrent-adapter" }
 my-streamio-scheduler = { path = "../../crates/scheduler" }
+my-streamio-media-pipeline = { path = "../../crates/media-pipeline" }
+my-streamio-timeline = { path = "../../crates/timeline" }
+sha2.workspace = true
 axum.workspace = true
 serde.workspace = true
 serde_json.workspace = true
