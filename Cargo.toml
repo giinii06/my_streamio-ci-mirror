@@ -3,6 +3,7 @@ members = [
   "crates/domain",
   "crates/discovery",
   "crates/scheduler",
+  "crates/timeline",
   "crates/torrent-adapter",
   "crates/verified-store",
   "apps/daemon",
