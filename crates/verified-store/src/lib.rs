@@ -31,7 +31,8 @@ impl VerifiedObject {
             return Err("piece hash count mismatch");
         }
         for (slice, hash) in bytes.chunks(piece_size).zip(hashes.iter()) {
-            if slice.is_empty() || Sha1::digest(slice).as_slice() != hash {
+            let computed: PieceHash = Sha1::digest(slice).into();
+            if slice.is_empty() || computed != *hash {
                 return Err("source piece failed SHA-1 verification");
             }
         }
@@ -71,7 +72,8 @@ impl VerifiedObject {
         }
         let end = start.saturating_add(piece_size).min(self.len());
         let bytes = &self.data[start..end];
-        if Sha1::digest(bytes).as_slice() != target_hash {
+        let computed: PieceHash = Sha1::digest(bytes).into();
+        if computed != target_hash {
             return Err("target piece SHA-1 mismatch");
         }
         Ok(bytes.to_vec())
@@ -123,8 +125,8 @@ mod tests {
         )
         .unwrap();
         let alternate_hashes = piece_hashes(&bytes, 6);
-        assert_eq!(source.verified_target_piece(0, 6, alternate_hashes[0]).unwrap(), b"ABCDEF");
-        assert_eq!(source.verified_target_piece(1, 6, alternate_hashes[1]).unwrap(), b"GHIJ");
+        assert_eq!(source.verified_target_piece(0, 6, alternate_hashes[0]).unwrap().as_slice(), b"ABCDEF");
+        assert_eq!(source.verified_target_piece(1, 6, alternate_hashes[1]).unwrap().as_slice(), b"GHIJ");
         let mut store = VerifiedStore::default();
         let id = store.insert(source.clone());
         store.insert(source);
