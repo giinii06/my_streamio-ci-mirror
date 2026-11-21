@@ -62,8 +62,8 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ffmpeg
-          ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libx264
-          ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libx265
+          ffmpeg -hide_banner -encoders 2>/dev/null | grep -E '[[:space:]]libx264([[:space:]]|$)' >/dev/null
+          ffmpeg -hide_banner -encoders 2>/dev/null | grep -E '[[:space:]]libx265([[:space:]]|$)' >/dev/null
 
       - name: Run real HLS video + audio integration test
         run: |
