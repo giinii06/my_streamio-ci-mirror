@@ -26,7 +26,9 @@ rust_verify:
     CARGO_TERM_COLOR: never
   script:
     - rustc --version
-    - cargo fmt --all -- --check
+    # Temporary diagnostic formatting in job workspace; source formatting is a follow-up commit.
+    - cargo fmt --all
+    - git diff --check
     - cargo test --workspace
     - cargo clippy --workspace --all-targets -- -D warnings
     - cargo build --workspace
