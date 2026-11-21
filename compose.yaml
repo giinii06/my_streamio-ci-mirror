@@ -1,0 +1,24 @@
+# Linux-only: host networking keeps daemon bound to host loopback.
+# Never publish the API to a public interface without a separate auth/TLS design.
+services:
+  my-streamio:
+    build:
+      context: .
+    image: my-streamio:local
+    network_mode: host
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    environment:
+      STREAMIO_PORT: "3031"
+      STREAMIO_DATA_DIR: /data/torrents
+    volumes:
+      - streamio-data:/data
+
+volumes:
+  streamio-data:

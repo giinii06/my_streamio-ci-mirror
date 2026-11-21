@@ -1,0 +1,8 @@
+.git
+target/
+data/
+.env
+.env.*
+tests/fixtures/generated/
+*.log
+.DS_Store
