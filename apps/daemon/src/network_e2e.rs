@@ -131,25 +131,12 @@ async fn two_real_swarms_deliver_piece_verified_http_seek_bytes() {
         let backend = TorrentBackend::open(recv_dir)
             .await
             .expect("start an isolated BitTorrent receiver");
-        let first = backend
-            .add_magnet_from_fixture_peer(&seeder.primary_magnet, port)
-            .await
-            .expect("BEP9 metadata for primary real seed");
-        let second = backend
-            .add_magnet_from_fixture_peer(&seeder.alternate_magnet, port)
-            .await
-            .expect("BEP9 metadata for alternate real seed");
-        let first_id = first["id"].as_u64().expect("first torrent ID");
-        let second_id = second["id"].as_u64().expect("second torrent ID");
-        assert_ne!(first_id, second_id, "two independent infohashes");
-        assert!(backend
-            .add_magnet_from_fixture_peer("not-a-magnet", port)
-            .await
-            .is_err());
-        assert!(backend
-            .add_magnet_from_fixture_peer(&seeder.primary_magnet, 0)
-            .await
-            .is_err());
+        // Test-only, instance-scoped peer injection: the PUBLIC API still
+        // accepts only valid magnets, and the released binary cannot set it.
+        assert!(backend.install_fixture_loopback_peer(0).is_err());
+        backend
+            .install_fixture_loopback_peer(port)
+            .expect("install fixed local seed port");
 
         let program_root = ProgramRoot(
             scratch.path().canonicalize().expect("canonicalize test root"),
@@ -174,6 +161,34 @@ async fn two_real_swarms_deliver_piece_verified_http_seek_bytes() {
             Some(r#"{"magnet":"not-a-magnet"}"#),
         );
         assert_eq!(bad.status, 422);
+
+        // Use the actual production POST handler; the isolated test feature
+        // changes only where the downloader finds its first real TCP peer.
+        let primary_json =
+            serde_json::json!({"magnet": seeder.primary_magnet.clone()}).to_string();
+        let alternate_json =
+            serde_json::json!({"magnet": seeder.alternate_magnet.clone()}).to_string();
+        let first_response = local_http(
+            &scratch,
+            &format!("{base}/api/v1/sources"),
+            None,
+            Some(&primary_json),
+        );
+        assert_eq!(first_response.status, 200, "first magnet admission");
+        let second_response = local_http(
+            &scratch,
+            &format!("{base}/api/v1/sources"),
+            None,
+            Some(&alternate_json),
+        );
+        assert_eq!(second_response.status, 200, "second magnet admission");
+        let first: serde_json::Value =
+            serde_json::from_slice(&first_response.body).expect("primary source response");
+        let second: serde_json::Value =
+            serde_json::from_slice(&second_response.body).expect("alternate source response");
+        let first_id = first["id"].as_u64().expect("first torrent ID");
+        let second_id = second["id"].as_u64().expect("second torrent ID");
+        assert_ne!(first_id, second_id, "independent torrent admissions");
 
         for (id, expected) in [(first_id, content_a), (second_id, content_b)] {
             let metadata = local_http(

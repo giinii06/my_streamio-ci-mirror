@@ -15,6 +15,8 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
+#[cfg(feature = "network-fixture")]
+use std::sync::atomic::{AtomicU16, Ordering};
 use url::Url;
 
 pub const MAX_MAGNET_BYTES: usize = 8192;
@@ -26,6 +28,8 @@ pub struct TorrentBackend {
     peer_samples: Arc<Mutex<HashMap<usize, PeerWindow>>>,
     admissions: Arc<Mutex<SwarmRegistry>>,
     keys_by_torrent_id: Arc<Mutex<HashMap<usize, SwarmKey>>>,
+    #[cfg(feature = "network-fixture")]
+    fixture_peer_port: Arc<AtomicU16>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -128,11 +132,29 @@ impl TorrentBackend {
             peer_samples: Arc::new(Mutex::new(HashMap::new())),
             admissions: Arc::new(Mutex::new(admissions)),
             keys_by_torrent_id: Arc::new(Mutex::new(HashMap::new())),
+            #[cfg(feature = "network-fixture")]
+            fixture_peer_port: Arc::new(AtomicU16::new(0)),
         })
     }
 
     pub async fn add_magnet(&self, magnet: &str) -> Result<Value> {
+        #[cfg(feature = "network-fixture")]
+        {
+            let port = self.fixture_peer_port.load(Ordering::SeqCst);
+            if port != 0 {
+                return self.add_magnet_from_fixture_peer(magnet, port).await;
+            }
+        }
         self.add_magnet_with_options(magnet, None).await
+    }
+
+    #[cfg(feature = "network-fixture")]
+    pub fn install_fixture_loopback_peer(&self, port: u16) -> Result<()> {
+        if port == 0 {
+            bail!("fixture must use a nonzero peer port");
+        }
+        self.fixture_peer_port.store(port, Ordering::SeqCst);
+        Ok(())
     }
 
     /// An explicit loopback-only peer override for hermetic in-process integration
