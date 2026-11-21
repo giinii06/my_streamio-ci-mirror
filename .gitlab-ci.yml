@@ -8,6 +8,7 @@ workflow:
 stages:
   - smoke
   - test
+  - media
 
 runner_smoke:
   stage: smoke
@@ -55,6 +56,32 @@ rust_verify:
     - cargo clippy --workspace --all-targets -- -D warnings
     - cargo build --workspace
     - sh tests/integration/smoke.sh
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+# On Linux ARM64, construct legal synthetic videos and verify their
+# H.264→HEVC→H.264 HLS output with a continuous primary audio track.
+media_hls_verify:
+  stage: media
+  image: rust:1.100.0-bookworm
+  variables:
+    CARGO_TERM_COLOR: never
+    CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+    CARGO_INCREMENTAL: "0"
+  cache:
+    key: "my-streamio-rust100-arm64-v1"
+    paths:
+      - .cargo/registry/
+      - target/
+    policy: pull
+  script:
+    - apt-get update -qq
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ffmpeg
+    - ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libx264
+    - ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libx265
+    - cargo fmt --all
+    - sh tests/integration/hls.sh
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH'
