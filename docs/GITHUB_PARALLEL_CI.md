@@ -45,7 +45,7 @@ For a one-off test, a user with authorized access to the GitHub mirror can push 
 ## Triggering and checking status
 
 - GitLab CI: navigate to the commit pipeline for the implementation/CI branch.
-- GitHub Actions: [GitLab CI Bridge actions](https://github.com/giinii06/my_streamio-ci-mirror/actions/workflows/gitlab-bridge.yml). Choose **Run workflow** for the branch when it has actually been mirrored; otherwise no matching source exists.
+- GitHub Actions: [GitLab CI Bridge actions](https://github.com/giinii06/my_streamio-ci-mirror/actions/workflows/gitlab-bridge.yml). A **push** of the mirrored feature ref triggers these jobs automatically. The current GitHub default-branch workflow has no `workflow_dispatch` event, so the **Run workflow** button might not be present even though this feature-branch workflow declares it; GitHub requires `workflow_dispatch` on the default branch to expose manual runs. Once a run exists, **Re-run jobs** is available.
 - If the GitHub mirror only has `main`, its existing `stack: docs` workflow verifies that `main` commit only and **cannot** be counted as a test of the feature branch.
 
 Until both sides report results for the same SHA, status is **configured in GitLab but GitHub execution unverified**.
