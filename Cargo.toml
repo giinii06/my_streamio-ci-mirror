@@ -2,6 +2,7 @@
 members = [
   "crates/domain",
   "crates/discovery",
+  "crates/media-pipeline",
   "crates/scheduler",
   "crates/timeline",
   "crates/torrent-adapter",
