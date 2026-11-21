@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+network-fixture = ["my-streamio-torrent-adapter/network-fixture"]
+
 [dependencies]
 my-streamio-domain = { path = "../../crates/domain" }
 my-streamio-torrent-adapter = { path = "../../crates/torrent-adapter" }
@@ -15,3 +18,7 @@ axum.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+
+[dev-dependencies]
+librqbit.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

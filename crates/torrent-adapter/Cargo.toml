@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# Test-only loopback peer injection. Never enabled for released binaries.
+network-fixture = []
+
 [dependencies]
 anyhow.workspace = true
 librqbit.workspace = true

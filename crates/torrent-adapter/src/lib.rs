@@ -2,7 +2,7 @@
 //! Applications must never treat arbitrary local file reads as torrent-verified bytes.
 
 use anyhow::{anyhow, bail, Context, Result};
-use librqbit::{api::TorrentIdOrHash, AddTorrent, Api, Session};
+use librqbit::{api::TorrentIdOrHash, AddTorrent, AddTorrentOptions, Api, Session};
 use my_streamio_domain::SwarmKey;
 use my_streamio_discovery::{PeerSnapshot, SwarmRegistry, SwarmState};
 use serde_json::Value;
@@ -115,6 +115,37 @@ impl TorrentBackend {
     }
 
     pub async fn add_magnet(&self, magnet: &str) -> Result<Value> {
+        self.add_magnet_with_options(magnet, None).await
+    }
+
+    /// An explicit loopback-only peer override for hermetic in-process integration
+    /// tests. This method is NOT included in normal or release builds.
+    #[cfg(feature = "network-fixture")]
+    pub async fn add_magnet_from_fixture_peer(
+        &self,
+        magnet: &str,
+        fixture_port: u16,
+    ) -> Result<Value> {
+        if fixture_port == 0 {
+            bail!("fixture peer must use a nonzero TCP port");
+        }
+        let peer = std::net::SocketAddr::from(([127, 0, 0, 1], fixture_port));
+        self.add_magnet_with_options(
+            magnet,
+            Some(AddTorrentOptions {
+                initial_peers: Some(vec![peer]),
+                disable_trackers: true,
+                ..Default::default()
+            }),
+        )
+        .await
+    }
+
+    async fn add_magnet_with_options(
+        &self,
+        magnet: &str,
+        options: Option<AddTorrentOptions>,
+    ) -> Result<Value> {
         let key = validate_magnet(magnet)?;
         {
             let mut registry = self.admissions.lock()
@@ -128,7 +159,7 @@ impl TorrentBackend {
         // hold the synchronous admission mutex across an async network call.
         let request = self
             .api
-            .api_add_torrent(AddTorrent::from_url(magnet), None)
+            .api_add_torrent(AddTorrent::from_url(magnet), options)
             .await;
         match request {
             Ok(response) => {

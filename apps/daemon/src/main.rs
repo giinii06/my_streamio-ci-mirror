@@ -310,6 +310,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(all(test, feature = "network-fixture"))]
+mod network_e2e;
+
 async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
 }
