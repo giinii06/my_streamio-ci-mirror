@@ -71,7 +71,7 @@ impl ProgramSpec {
             bail!("program requires 1..32 bounded video intervals");
         }
         if self.width < 16 || self.width > 3840 || self.height < 16 || self.height > 2160 ||
-            self.width % 2 != 0 || self.height % 2 != 0 ||
+            !self.width.is_multiple_of(2) || !self.height.is_multiple_of(2) ||
             !(16..=60).contains(&self.fps) ||
             !(2..=10).contains(&self.hls_segment_seconds) {
             bail!("invalid output video/HLS profile");
