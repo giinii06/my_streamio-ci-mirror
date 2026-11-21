@@ -129,7 +129,7 @@ mod tests {
         let anchors = vec![a(0.0, 350.0), a(10000.0, 10360.0), a(20000.0, 20370.0)];
         let map = align(&anchors, 20.0).unwrap();
         assert!((map.slope - 1.001).abs() < 0.0001);
-        assert_eq!(map.reference_time(0.0), Some(350.0));
+        assert!((map.reference_time(0.0).unwrap() - 350.0).abs() < 1e-6);
         assert_eq!(map.reference_time(25_000.0), None);
         assert!(!map.covers(15_000.0, 25_000.0));
     }
