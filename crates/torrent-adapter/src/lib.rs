@@ -502,3 +502,60 @@ mod tests {
         assert!(matches!(result, SwarmKey::V2(_)));
     }
 }
+
+
+/// A deterministic local peer used solely by the opt-in network fixture.
+/// It is compiled out of all normal release builds and never offers a
+/// browser/HTTP endpoint that can accept arbitrary peer addresses.
+#[cfg(feature = "network-fixture")]
+pub struct FixtureSeeder {
+    session: Arc<Session>,
+    pub peer_port: u16,
+    pub primary_magnet: String,
+    pub alternate_magnet: String,
+}
+
+#[cfg(feature = "network-fixture")]
+impl FixtureSeeder {
+    pub async fn start(primary: &std::path::Path, alternate: &std::path::Path) -> Result<Self> {
+        let root = primary.parent().context("fixture primary path has no parent")?;
+        if alternate.parent() != Some(root) {
+            bail!("two fixture source files must share one isolated seed directory");
+        }
+        let session = Session::new(root.to_path_buf()).await?;
+        let peer_port = session
+            .listen_addr()
+            .context("BitTorrent seeder has no TCP listener")?
+            .port();
+        if peer_port == 0 {
+            bail!("BitTorrent seeder must have an assigned TCP port");
+        }
+        let (primary_meta, _a) = session
+            .create_and_serve_torrent(primary, librqbit::CreateTorrentOptions {
+                piece_length: Some(65_536),
+                ..Default::default()
+            })
+            .await
+            .context("seeding first synthetic MP4")?;
+        let (alternate_meta, _b) = session
+            .create_and_serve_torrent(alternate, librqbit::CreateTorrentOptions {
+                piece_length: Some(131_072),
+                ..Default::default()
+            })
+            .await
+            .context("seeding second synthetic MP4")?;
+        if primary_meta.info_hash() == alternate_meta.info_hash() {
+            bail!("two independent synthetic torrents must have distinct infohashes");
+        }
+        Ok(Self {
+            session,
+            peer_port,
+            primary_magnet: primary_meta.as_magnet().to_string(),
+            alternate_magnet: alternate_meta.as_magnet().to_string(),
+        })
+    }
+
+    pub async fn stop(self) {
+        self.session.stop().await;
+    }
+}
