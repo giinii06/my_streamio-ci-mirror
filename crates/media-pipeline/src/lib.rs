@@ -3,6 +3,7 @@
 //! audio, prove scene identity, or transform an incomplete torrent file itself.
 
 pub mod hardware;
+pub mod planner;
 
 use anyhow::{bail, Context, Result};
 use std::{
