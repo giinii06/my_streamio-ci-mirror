@@ -4,7 +4,7 @@
 use anyhow::{anyhow, bail, Context, Result};
 use librqbit::{api::TorrentIdOrHash, AddTorrent, Api, Session};
 use my_streamio_domain::SwarmKey;
-use my_streamio_discovery::SwarmRegistry;
+use my_streamio_discovery::{PeerSnapshot, SwarmRegistry, SwarmState};
 use serde_json::Value;
 use std::{
     collections::HashMap,
@@ -25,6 +25,7 @@ pub struct TorrentBackend {
     api: Api,
     peer_samples: Arc<Mutex<HashMap<usize, PeerWindow>>>,
     admissions: Arc<Mutex<SwarmRegistry>>,
+    keys_by_torrent_id: Arc<Mutex<HashMap<usize, SwarmKey>>>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -109,6 +110,7 @@ impl TorrentBackend {
             api: Api::new(session, None),
             peer_samples: Arc::new(Mutex::new(HashMap::new())),
             admissions: Arc::new(Mutex::new(admissions)),
+            keys_by_torrent_id: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -130,7 +132,11 @@ impl TorrentBackend {
             .await;
         match request {
             Ok(response) => {
-                if response.id.is_none() {
+                if let Some(torrent_id) = response.id {
+                    let mut id_map = self.keys_by_torrent_id.lock()
+                        .map_err(|_| anyhow!("swarm-to-torrent mapping poisoned"))?;
+                    id_map.insert(torrent_id, key.clone());
+                } else {
                     let mut registry = self.admissions.lock()
                         .map_err(|_| anyhow!("swarm registry poisoned"))?;
                     registry.remove(&key);
@@ -202,6 +208,35 @@ impl TorrentBackend {
         ));
         let result = summarize_peer_window(old, &counters);
         history.insert(torrent_id, PeerWindow { at: now, counters });
+        drop(history);
+
+        let key = {
+            let map = self.keys_by_torrent_id.lock()
+                .map_err(|_| anyhow!("swarm-to-torrent mapping poisoned"))?;
+            map.get(&torrent_id).cloned()
+        };
+        if let Some(key) = key {
+            let mut registry = self.admissions.lock()
+                .map_err(|_| anyhow!("swarm registry poisoned"))?;
+            let state = if result.contributing_peers > 0 {
+                SwarmState::Supplying
+            } else if result.connected_peers > 0 {
+                SwarmState::Connected
+            } else {
+                SwarmState::Discovering
+            };
+            // This API does not expose total discovered endpoints or verified
+            // bytes per second. Connected is only a lower bound on discovery;
+            // fetched bytes must never be misreported as verified goodput.
+            let stats = PeerSnapshot {
+                discovered: result.connected_peers,
+                connected: result.connected_peers,
+                useful: result.contributing_peers,
+                verified_bytes_per_sec: 0,
+                needed_range_available_percent: 0,
+            };
+            registry.update(&key, state, stats).map_err(|reason| anyhow!(reason))?;
+        }
         Ok(result)
     }
 
