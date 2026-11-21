@@ -30,9 +30,9 @@ The GitHub caller workflow has `workflow_dispatch` for manual re-runs, only `con
 
 The GitLab feature branch must exist on the GitHub mirror **with the same commit SHA**, and the workflow must already be present on that branch. Merely adding the caller workflow to GitLab does not activate GitHub Actions.
 
-Preferred: adjust the **existing configured push-mirror rules** in GitLab project Settings → Repository → Mirroring repositories so the intended test branch(es) are mirrored. Do not create another mirror target or expose all private development branches accidentally. If that GitLab mirror allows *only protected refs*, protecting the specifically approved CI ref may be an alternative subject to repository permissions. The existing GitLab connector cannot edit the push-mirror configuration or the GitHub repository.
+The automatic public mirror sends protected `main` and tags. To run a one-off feature-branch check, use a private GitHub repository or obtain approval to publish that exact branch to the public mirror. A branch push publishes the whole Git history reachable from its head.
 
-For a one-off test, a user with authorized access to the GitHub mirror can push the CI branch there from a trusted local checkout using existing authentication (no token in Git). Avoid force-pushing the public GitHub mirror. Public mirrors expose all pushed source code.
+Commit `Cargo.lock` with the workspace. The reusable Rust workflow builds and tests with `--locked`.
 
 ## Required checks before declaring success
 
@@ -46,6 +46,7 @@ For a one-off test, a user with authorized access to the GitHub mirror can push 
 
 - GitLab CI: navigate to the commit pipeline for the implementation/CI branch.
 - GitHub Actions: [GitLab CI Bridge actions](https://github.com/giinii06/my_streamio-ci-mirror/actions/workflows/gitlab-bridge.yml). A **push** of the mirrored feature ref triggers these jobs automatically. The current GitHub default-branch workflow has no `workflow_dispatch` event, so the **Run workflow** button might not be present even though this feature-branch workflow declares it; GitHub requires `workflow_dispatch` on the default branch to expose manual runs. Once a run exists, **Re-run jobs** is available.
+- The `ci-hub` bridge reports completed `main` runs automatically. For a one-off feature-branch run, record the result on the GitLab commit using the exact source SHA, branch, and GitHub run URL.
 - If the GitHub mirror only has `main`, its existing `stack: docs` workflow verifies that `main` commit only and **cannot** be counted as a test of the feature branch.
 
 Until both sides report results for the same SHA, status is **configured in GitLab but GitHub execution unverified**.
