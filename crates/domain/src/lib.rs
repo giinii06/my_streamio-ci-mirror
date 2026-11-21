@@ -87,7 +87,7 @@ fn decode_hex<const N: usize>(text: &str) -> Result<[u8; N], &'static str> {
         return Err("invalid hex length");
     }
     let mut bytes = [0u8; N];
-    for (i, chunk) in text.as_bytes().chunks_exact(2).enumerate() {
+    for (i, chunk) in text.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         let hex_digit = |value: u8| -> Option<u8> {
             match value {
                 b'0'..=b'9' => Some(value - b'0'),
