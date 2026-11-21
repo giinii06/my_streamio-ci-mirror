@@ -93,6 +93,23 @@ fn summarize_peer_window(
 impl TorrentBackend {
     pub async fn open(storage_dir: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&storage_dir).context("creating torrent storage directory")?;
+        // In a special opt-in test build, do not contact public DHT,
+        // trackers or LAN multicast. The only peer is explicitly set to
+        // 127.0.0.1 by add_magnet_from_fixture_peer.
+        #[cfg(feature = "network-fixture")]
+        let session = Session::new_with_opts(
+            storage_dir,
+            librqbit::SessionOptions {
+                dht: None,
+                disable_trackers: true,
+                disable_local_service_discovery: true,
+                ipv4_only: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .context("starting isolated network fixture receiver")?;
+        #[cfg(not(feature = "network-fixture"))]
         let session = Session::new(storage_dir)
             .await
             .context("starting torrent session")?;
@@ -522,7 +539,17 @@ impl FixtureSeeder {
         if alternate.parent() != Some(root) {
             bail!("two fixture source files must share one isolated seed directory");
         }
-        let session = Session::new(root.to_path_buf()).await?;
+        let session = Session::new_with_opts(
+            root.to_path_buf(),
+            librqbit::SessionOptions {
+                dht: None,
+                disable_trackers: true,
+                disable_local_service_discovery: true,
+                ipv4_only: true,
+                ..Default::default()
+            },
+        )
+        .await?;
         let peer_port = session
             .listen_addr()
             .context("BitTorrent seeder has no TCP listener")?
