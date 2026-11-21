@@ -33,11 +33,23 @@ impl TorrentBackend {
             .api_add_torrent(AddTorrent::from_url(magnet), None)
             .await
             .context("librqbit add_torrent failed")?;
-        serde_json::to_value(response).context("serializing torrent response")
+        Ok(serde_json::json!({
+            "id": response.id,
+            "info_hash": response.details.info_hash,
+            "name": response.details.name
+        }))
     }
 
     pub fn list_torrents(&self) -> Result<Value> {
-        serde_json::to_value(self.api.api_torrent_list()).context("serializing torrent list")
+        Ok(serde_json::json!({
+            "torrents": self.api.api_torrent_list().torrents.into_iter().map(|source| {
+                serde_json::json!({
+                    "id": source.id,
+                    "info_hash": source.info_hash,
+                    "name": source.name
+                })
+            }).collect::<Vec<Value>>()
+        }))
     }
 
     /// Return file metadata without disclosing host storage paths.
@@ -64,7 +76,6 @@ impl TorrentBackend {
         }
         let mut stream = self.api
             .api_stream(TorrentIdOrHash::Id(torrent_id), file_id)
-            .await
             .context("cannot open torrent file stream")?;
         let read = async {
             stream.seek(SeekFrom::Start(offset)).await?;
