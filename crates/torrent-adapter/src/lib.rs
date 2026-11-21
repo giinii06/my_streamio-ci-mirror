@@ -108,6 +108,13 @@ impl TorrentBackend {
                 disable_trackers: true,
                 disable_local_service_discovery: true,
                 ipv4_only: true,
+                // Even isolated CI must never expose test BitTorrent
+                // listeners to public or private network interfaces.
+                listen: Some(librqbit::ListenerOptions {
+                    listen_addr: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+                    enable_upnp_port_forwarding: false,
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
         )
@@ -568,6 +575,13 @@ impl FixtureSeeder {
                 disable_trackers: true,
                 disable_local_service_discovery: true,
                 ipv4_only: true,
+                // Even isolated CI must never expose test BitTorrent
+                // listeners to public or private network interfaces.
+                listen: Some(librqbit::ListenerOptions {
+                    listen_addr: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+                    enable_upnp_port_forwarding: false,
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
         )
