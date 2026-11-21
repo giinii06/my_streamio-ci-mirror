@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/domain", "crates/torrent-adapter", "apps/daemon"]
+members = ["crates/domain", "crates/discovery", "crates/torrent-adapter", "apps/daemon"]
 resolver = "2"
 
 [workspace.package]
