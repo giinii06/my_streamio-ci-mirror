@@ -10,25 +10,25 @@ Target: `blond11qq/my_streamio`, branch `ci/github-parallel-verification`, Draft
 
 ## Phase 01 — Replace inactive GitLab Runner configuration
 
-- [ ] Delete the stale repository `.gitlab-ci.yml` containing runner_smoke, rust_verify and media_hls_verify.
-- [ ] Preserve the already-configured project CI path `.gitlab/ci-hub-request.yml@blond11qq/ci-hub-smoke`, whose jobs only request GitHub Actions and do not run Rust/FFmpeg.
-- [ ] Record that changing GitLab CI settings back to default would require explicit review and restoration of the bridge.
-- Implemented: no | Committed: no | Tested: no
+- [x] Delete the stale repository `.gitlab-ci.yml` containing runner_smoke, rust_verify and media_hls_verify.
+- [x] Preserve the already-configured project CI path `.gitlab/ci-hub-request.yml@blond11qq/ci-hub-smoke`, whose jobs only request GitHub Actions and do not run Rust/FFmpeg.
+- [x] Record that changing GitLab CI settings back to default would require explicit review and restoration of the bridge.
+- Implemented: yes | Committed: yes | Tested: yes (source tree and matching-SHA zero-runner pipeline)
 
 ## Phase 02 — GitHub workflow and documentation consistency
 
-- [ ] Keep GitHub reusable Rust ci-hub, Clippy and HLS jobs independently runnable.
-- [ ] Align documentation to the actual externally configured GitLab→GitHub dispatch, not legacy protected-branch mirroring assumptions.
-- [ ] Update README and CI document with GitHub-only policy and exact-SHA verification.
-- Implemented: no | Committed: no | Tested: no
+- [x] Keep GitHub reusable Rust ci-hub, Clippy and HLS jobs independently runnable.
+- [x] Align documentation to the actual externally configured GitLab→GitHub dispatch, not legacy protected-branch mirroring assumptions.
+- [x] Update README and CI document with GitHub-only policy and exact-SHA verification.
+- Implemented: yes | Committed: yes | Tested: static source review only (individual GitHub job logs not available)
 
 ## Phase 03 — Exact SHA remote verification
 
-- [ ] Inspect resulting branch SHA, workflow file, GitLab project's external CI configuration path and MR diff.
-- [ ] Trigger GitHub CI through a GitLab API pipeline for that exact branch SHA, capture `github-actions/ci-hub-request` result and run URL.
-- [ ] Check actual individual GitHub jobs when provider data is available, else explicitly mark their conclusions unverified.
-- [ ] Update Draft MR !12 with evidence. Do not merge/deploy.
-- Implemented: no | Committed: no | Tested: no
+- [x] Inspect resulting branch SHA, workflow file, GitLab project's external CI configuration path and MR diff.
+- [x] Trigger GitHub CI through a GitLab API pipeline for that exact branch SHA, capture `github-actions/ci-hub-request` result and run URL.
+- [x] Check actual individual GitHub jobs when provider data is available, else explicitly mark their conclusions unverified.
+- [x] Update Draft MR !12 with evidence. Do not merge/deploy.
+- Implemented: yes | Committed: yes | Provider callback: success | Jobs: unknown (not directly inspectable)
 
 ## Acceptance
 
