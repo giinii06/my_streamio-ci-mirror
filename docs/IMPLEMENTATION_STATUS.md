@@ -11,7 +11,7 @@ Updated 2026-11-22. All entries marked **unverified** until an exact HEAD SHA Gi
 | 04 | Time-indexed demands, piece mapping, byte range, seek generations | Includes HTTP Range endpoint calling librqbit verified file stream; uncompiled and unverified against real media |
 | 05 | Complete single-file v1 verification, target-piece hash recheck | No sparse storage, v2 proof or real reuse across two live torrents |
 | 06 | Affine timeline alignment from provided evidence | No video fingerprint extraction or edited-cut piecewise alignment |
-| 07 | FFmpeg video segment renderer with output validation | No audio continuity, HLS manifests, cross-encode seamless playback |
+| 07 | FFmpeg video segment renderer with output validation | Offline HLS assembler with a single primary audio encoder now committed; end-to-end CI / running player verification pending, not live torrent switching |
 | 08 | Local source manager UI | Local player has single-source byte-range URL; real video startup/seek test pending |
 | 09 | VideoToolbox encoder discovery probe | Not benchmarked or integrated as active encoder on user's Mac M5 |
 | 10 | Playback event metric aggregation | Not connected to running daemon or comparative benchmark |

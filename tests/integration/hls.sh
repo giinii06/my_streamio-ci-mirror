@@ -5,7 +5,9 @@ set -eu
 command -v ffmpeg >/dev/null 2>&1 || { echo "missing ffmpeg" >&2; exit 1; }
 command -v ffprobe >/dev/null 2>&1 || { echo "missing ffprobe" >&2; exit 1; }
 sh tests/fixtures/generate.sh
-cargo run --locked --bin hls_fixture -- tests/fixtures/generated
+# Idempotent test output. Never delete anything outside the generated test tree.
+rm -rf tests/fixtures/generated/hls-programs/integration-switch
+cargo run --bin hls_fixture -- tests/fixtures/generated
 playlist="tests/fixtures/generated/hls-programs/integration-switch/playlist.m3u8"
 test -s "$playlist"
 grep -q '#EXT-X-INDEPENDENT-SEGMENTS' "$playlist"
