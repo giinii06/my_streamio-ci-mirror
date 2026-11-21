@@ -1,5 +1,5 @@
 # Linux ARM64 runtime. Mac VideoToolbox requires a separate native macOS build.
-FROM rust:1.91.1-bookworm AS builder
+FROM rust:1.100.0-bookworm AS builder
 WORKDIR /workspace
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*

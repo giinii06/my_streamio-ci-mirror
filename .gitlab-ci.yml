@@ -21,7 +21,7 @@ runner_smoke:
 
 rust_verify:
   stage: test
-  image: rust:1.91.1-bookworm
+  image: rust:1.100.0-bookworm
   variables:
     CARGO_TERM_COLOR: never
   script:
