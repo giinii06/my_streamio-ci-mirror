@@ -37,6 +37,10 @@ grep -q '"status":"ok"' "$workdir/health.json"
 curl --max-time 5 --fail --silent "http://127.0.0.1:$STREAMIO_PORT/" | grep -q 'My Streamio'
 curl --max-time 5 --fail --silent "http://127.0.0.1:$STREAMIO_PORT/" | grep -q 'Single-source playback'
 curl --max-time 5 --fail --silent "http://127.0.0.1:$STREAMIO_PORT/api/v1/sources" | grep -q '"torrents"'
+missing_hls="$(curl --max-time 5 --silent -o /dev/null -w '%{http_code}' \
+  "http://127.0.0.1:$STREAMIO_PORT/api/v1/programs/none/playlist.m3u8")"
+test "$missing_hls" = "404"
+
 bad_host="$(curl --max-time 5 --silent -o /dev/null -w '%{http_code}' \
   -H 'Host: attacker.example' "http://127.0.0.1:$STREAMIO_PORT/healthz")"
 test "$bad_host" = "403"

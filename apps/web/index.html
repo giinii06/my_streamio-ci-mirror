@@ -54,6 +54,15 @@
     <p class="muted">Sources are independent swarms; discovered peers do not imply usable download contributors.</p>
     <ul id="sources"><li class="muted empty">Checking backend…</li></ul>
   </section>
+  <section class="panel" aria-labelledby="hls-title">
+    <h2 id="hls-title">Play an assembled HLS program</h2>
+    <p class="muted">Offline demo: first generate a verified-source program with the test CLI. Native HLS works in Safari; other browsers may need an HLS player library.</p>
+    <form id="hls-form">
+      <label for="program-id" style="width:100%">Program ID</label>
+      <input id="program-id" type="text" value="integration-switch" maxlength="80" required>
+      <button type="submit">Play HLS</button>
+    </form>
+  </section>
   <section class="panel" aria-labelledby="player-title">
     <h2 id="player-title">Single-source playback</h2>
     <p class="muted">Stream a compatible MP4/WebM from one selected torrent. Multi-encode source switching is not integrated yet.</p>
@@ -175,6 +184,18 @@
       } finally {
         button.disabled = false;
       }
+    });
+    document.getElementById("hls-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const id = document.getElementById("program-id").value.trim();
+      if (!/^[a-zA-Z0-9-]{1,80}$/.test(id)) {
+        message.textContent = "Invalid program ID";
+        return;
+      }
+      const player = document.getElementById("player");
+      player.src = "/api/v1/programs/" + id + "/playlist.m3u8";
+      player.load();
+      player.scrollIntoView({behavior:"smooth",block:"center"});
     });
     document.getElementById("refresh").addEventListener("click", refreshSources);
     refreshSources();

@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Request, State},
+    extract::{Extension, Path, Request, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     middleware::{self, Next},
     response::Html,
@@ -11,7 +11,7 @@ use my_streamio_scheduler::{parse_http_range, ByteRange};
 use my_streamio_torrent_adapter::{TorrentBackend, MAX_HTTP_CHUNK};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::{env, net::SocketAddr};
+use std::{env, net::SocketAddr, path::{Path as FsPath, PathBuf}};
 use tokio::net::TcpListener;
 
 async fn home() -> Html<&'static str> {
@@ -154,6 +154,80 @@ async fn stream_source_file(
     response
 }
 
+
+#[derive(Clone)]
+struct ProgramRoot(PathBuf);
+
+fn safe_program_name(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 80
+        && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+}
+
+fn safe_segment_name(name: &str) -> bool {
+    let digits = name.strip_prefix("seg").and_then(|s| s.strip_suffix(".ts"));
+    digits.is_some_and(|s| !s.is_empty() && s.len() <= 16 && s.bytes().all(|b| b.is_ascii_digit()))
+}
+
+fn resolve_program_asset(root: &FsPath, id: &str, filename: &str) -> Option<PathBuf> {
+    if !safe_program_name(id) || !(filename == "playlist.m3u8" || safe_segment_name(filename)) {
+        return None;
+    }
+    let directory = root.join("hls-programs").join(id);
+    let canonical_dir = directory.canonicalize().ok()?;
+    if !canonical_dir.starts_with(root) {
+        return None;
+    }
+    let path = canonical_dir.join(filename).canonicalize().ok()?;
+    if !path.starts_with(&canonical_dir) || !path.is_file() {
+        return None;
+    }
+    Some(path)
+}
+
+async fn serve_program_asset(root: &FsPath, id: &str, filename: &str) -> Response {
+    let Some(file) = resolve_program_asset(root, id, filename) else {
+        return (StatusCode::NOT_FOUND, "HLS media not found").into_response();
+    };
+    let Ok(meta) = tokio::fs::metadata(&file).await else {
+        return (StatusCode::NOT_FOUND, "HLS media not found").into_response();
+    };
+    if meta.len() > 16 * 1024 * 1024 {
+        return (StatusCode::PAYLOAD_TOO_LARGE, "HLS segment exceeds safe in-memory response cap").into_response();
+    }
+    let Ok(bytes) = tokio::fs::read(&file).await else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "HLS media unavailable").into_response();
+    };
+    let mut response = (StatusCode::OK, bytes).into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(if filename == "playlist.m3u8" {
+            "application/vnd.apple.mpegurl"
+        } else {
+            "video/mp2t"
+        }),
+    );
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, max-age=60"),
+    );
+    response
+}
+
+async fn program_playlist(
+    Path(program_id): Path<String>,
+    Extension(root): Extension<ProgramRoot>,
+) -> Response {
+    serve_program_asset(&root.0, &program_id, "playlist.m3u8").await
+}
+
+async fn program_segment(
+    Path((program_id, segment_name)): Path<(String, String)>,
+    Extension(root): Extension<ProgramRoot>,
+) -> Response {
+    serve_program_asset(&root.0, &program_id, &segment_name).await
+}
+
 fn is_local_host(host: &str) -> bool {
     let (hostname, port) = match host.split_once(':') {
         Some((hostname, port)) => (hostname, Some(port)),
@@ -201,18 +275,24 @@ fn listen_address() -> Result<SocketAddr, Box<dyn std::error::Error>> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let address = listen_address()?;
     let data_dir = env::var("STREAMIO_DATA_DIR").unwrap_or_else(|_| "./data".to_owned());
+    let program_dir = env::var("STREAMIO_MEDIA_DIR").unwrap_or_else(|_| data_dir.clone());
+    std::fs::create_dir_all(&program_dir)?;
+    let program_root = ProgramRoot(FsPath::new(&program_dir).canonicalize()?);
     let backend = TorrentBackend::open(data_dir.into()).await?;
     let app = Router::new()
         .route("/", get(home))
         .route("/healthz", get(health))
         .route("/api/v1/sources", get(list_sources).post(add_source))
         .route("/api/v1/sources/{torrent_id}/peers", get(peer_overview))
+        .route("/api/v1/programs/{program_id}/playlist.m3u8", get(program_playlist))
+        .route("/api/v1/programs/{program_id}/{segment_name}", get(program_segment))
         .route("/api/v1/sources/{torrent_id}/files", get(list_source_files))
         .route(
             "/api/v1/sources/{torrent_id}/files/{file_id}/stream",
             get(stream_source_file),
         )
         .with_state(backend)
+        .layer(Extension(program_root))
         .layer(middleware::from_fn(guard_local_api));
     let listener = TcpListener::bind(address).await?;
     eprintln!("my-streamio: listening on http://{address}");
@@ -233,6 +313,17 @@ mod tests {
     #[tokio::test]
     async fn homepage_is_bundled_without_external_assets() {
         assert!(home().await.0.contains("My Streamio"));
+    }
+
+    #[test]
+    fn only_hls_manifest_and_numeric_segment_names_can_be_served() {
+        assert!(safe_program_name("integration-switch"));
+        assert!(!safe_program_name("../etc"));
+        assert!(!safe_program_name("a/b"));
+        assert!(safe_segment_name("seg00012.ts"));
+        assert!(!safe_segment_name("ffmpeg.log"));
+        assert!(!safe_segment_name("../seg00012.ts"));
+        assert!(!safe_segment_name("segabc.ts"));
     }
 
     #[test]
