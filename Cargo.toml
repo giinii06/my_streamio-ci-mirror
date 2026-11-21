@@ -4,6 +4,7 @@ members = [
   "crates/discovery",
   "crates/media-pipeline",
   "crates/scheduler",
+  "crates/telemetry",
   "crates/timeline",
   "crates/torrent-adapter",
   "crates/verified-store",
