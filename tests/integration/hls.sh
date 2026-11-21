@@ -25,3 +25,15 @@ if grep -Eqi 'Packet corrupt|non monotonically increasing|Invalid data found|cor
   exit 1
 fi
 echo "9-second two-encoding, one-audio-track HLS test passed"
+
+# Run the opt-in *real network* test in the EXISTING GitHub media-HLS job.
+# A passing offline HLS composition test alone is not proof of torrent bytes.
+# The explicit --list guard ensures an accidentally filtered-out test is not
+# misreported as success.
+cargo test --locked -p my-streamio-daemon --features network-fixture \
+  --bin my-streamio-daemon -- --list |
+  grep -F 'network_e2e::two_real_swarms_deliver_piece_verified_http_seek_bytes: test'
+cargo test --locked -p my-streamio-daemon --features network-fixture \
+  --bin my-streamio-daemon -- \
+  network_e2e::two_real_swarms_deliver_piece_verified_http_seek_bytes --nocapture
+echo "Real two-swarm BitTorrent peer-to-verified-HTTP E2E test passed"
