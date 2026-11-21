@@ -4,6 +4,7 @@
 
 pub mod hardware;
 pub mod planner;
+pub mod hls_program;
 
 use anyhow::{bail, Context, Result};
 use std::{

@@ -6,3 +6,5 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+my-streamio-timeline = { path = "../timeline" }
+sha2.workspace = true
