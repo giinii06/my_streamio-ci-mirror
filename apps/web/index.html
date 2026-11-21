@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>My Streamio — Local Sources</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system,BlinkMacSystemFont,Inter,system-ui,sans-serif;
+      background:#0c111b; color:#e8edf4; }
+    body { max-width:950px; margin:0 auto; padding:36px 20px 80px; }
+    h1 { font-size:clamp(26px,5vw,40px); margin:0; letter-spacing:-.04em; }
+    h2 { font-size:18px; margin:0 0 16px; }
+    p,small { color:#9daabd; line-height:1.5; }
+    .sub { font-size:15px; margin:8px 0 30px; }
+    .panel { background:#131c2b; padding:24px; border-radius:16px; border:1px solid #253349;
+      margin-bottom:18px; }
+    label { display:block; font-weight:600; margin-bottom:12px; }
+    form { display:flex; gap:10px; flex-wrap:wrap; }
+    input { font:inherit; flex:1; min-width:200px; padding:13px; border-radius:8px;
+      background:#0b1220; color:#e8edf4; border:1px solid #32435e; }
+    button { font:inherit; cursor:pointer; border:0; background:#5c85fc; color:#fff;
+      padding:12px 18px; border-radius:8px; font-weight:700; }
+    button:disabled { opacity:.5; cursor:wait; }
+    button.secondary { background:#28384f; }
+    .top { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    ul { padding:0; margin:0; list-style:none; }
+    li { background:#0b1220; padding:14px; border-radius:9px; margin-top:8px;
+      display:grid; gap:6px; overflow-wrap:anywhere; }
+    .muted { color:#9daabd; font-size:13px; }
+    .empty { padding:20px 0; }
+    #message { min-height:22px; }
+    :focus-visible { outline:3px solid #bfd0ff; outline-offset:2px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>My Streamio</h1>
+    <p class="sub">Local torrent source manager · multi-swarm engine under development</p>
+  </header>
+  <section class="panel" aria-labelledby="add-title">
+    <h2 id="add-title">Add a source</h2>
+    <p>Use magnet links for media you own or are authorized to share. The engine downloads from the torrent swarm.</p>
+    <form id="add-form">
+      <label for="magnet" style="width:100%">Magnet URI</label>
+      <input id="magnet" type="text" autocomplete="off" spellcheck="false"
+        placeholder="magnet:?xt=urn:btih:..." required maxlength="8192">
+      <button id="add-button" type="submit">Add source</button>
+    </form>
+    <p id="message" role="status" aria-live="polite"></p>
+  </section>
+  <section class="panel" aria-labelledby="source-title">
+    <div class="top"><h2 id="source-title">Active torrents</h2>
+      <button id="refresh" class="secondary" type="button">Refresh</button></div>
+    <p class="muted">Sources are independent swarms; discovered peers do not imply usable download contributors.</p>
+    <ul id="sources"><li class="muted empty">Checking backend…</li></ul>
+  </section>
+  <p class="muted">Streaming, alignment and live quality-switching are not yet exposed here. All data stays on your machine.</p>
+  <script>
+    "use strict";
+    const message = document.getElementById("message");
+    const list = document.getElementById("sources");
+    const form = document.getElementById("add-form");
+    async function refreshSources() {
+      list.replaceChildren();
+      try {
+        const response = await fetch("/api/v1/sources", {cache:"no-store"});
+        if (!response.ok) throw new Error("Backend returned " + response.status);
+        const data = await response.json();
+        const sources = Array.isArray(data.torrents) ? data.torrents : [];
+        if (!sources.length) {
+          const empty = document.createElement("li");
+          empty.className = "muted empty";
+          empty.textContent = "No active torrents. Add a magnet link above.";
+          list.appendChild(empty);
+        }
+        for (const torrent of sources) {
+          const item = document.createElement("li");
+          const name = document.createElement("strong");
+          name.textContent = torrent.name || "Metadata pending";
+          const info = document.createElement("span");
+          info.className = "muted";
+          info.textContent = "Infohash: " + (torrent.info_hash || "unknown");
+          item.append(name, info);
+          list.appendChild(item);
+        }
+      } catch {
+        const item = document.createElement("li");
+        item.textContent = "Unable to load torrent status. Check that the daemon is running.";
+        list.appendChild(item);
+      }
+    }
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const button = document.getElementById("add-button");
+      button.disabled = true;
+      message.textContent = "Connecting to torrent source…";
+      try {
+        const response = await fetch("/api/v1/sources", {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({magnet:document.getElementById("magnet").value})
+        });
+        if (!response.ok) throw new Error("Source rejected or not reachable (" + response.status + ")");
+        message.textContent = "Source added.";
+        form.reset();
+        await refreshSources();
+      } catch(error) {
+        message.textContent = error.message || "Source could not be added.";
+      } finally {
+        button.disabled = false;
+      }
+    });
+    document.getElementById("refresh").addEventListener("click", refreshSources);
+    refreshSources();
+  </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 use axum::{
     extract::State,
     http::StatusCode,
+    response::Html,
     routing::get,
     Json, Router,
 };
@@ -9,6 +10,10 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{env, net::SocketAddr};
 use tokio::net::TcpListener;
+
+async fn home() -> Html<&'static str> {
+    Html(include_str!("../../web/index.html"))
+}
 
 async fn health() -> Json<Value> {
     Json(json!({"status":"ok","service":"my-streamio","version":env!("CARGO_PKG_VERSION")}))
@@ -55,6 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = env::var("STREAMIO_DATA_DIR").unwrap_or_else(|_| "./data".to_owned());
     let backend = TorrentBackend::open(data_dir.into()).await?;
     let app = Router::new()
+        .route("/", get(home))
         .route("/healthz", get(health))
         .route("/api/v1/sources", get(list_sources).post(add_source))
         .with_state(backend);
@@ -73,6 +79,11 @@ async fn shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn homepage_is_bundled_without_external_assets() {
+        assert!(home().await.0.contains("My Streamio"));
+    }
 
     #[test]
     fn binds_to_loopback_only() {
