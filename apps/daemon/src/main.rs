@@ -278,15 +278,8 @@ fn listen_address() -> Result<SocketAddr, Box<dyn std::error::Error>> {
     Ok(SocketAddr::from(([127, 0, 0, 1], port)))
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let address = listen_address()?;
-    let data_dir = env::var("STREAMIO_DATA_DIR").unwrap_or_else(|_| "./data".to_owned());
-    let program_dir = env::var("STREAMIO_MEDIA_DIR").unwrap_or_else(|_| data_dir.clone());
-    std::fs::create_dir_all(&program_dir)?;
-    let program_root = ProgramRoot(FsPath::new(&program_dir).canonicalize()?);
-    let backend = TorrentBackend::open(data_dir.into()).await?;
-    let app = Router::new()
+fn app_router(backend: TorrentBackend, program_root: ProgramRoot) -> Router {
+    Router::new()
         .route("/", get(home))
         .route("/healthz", get(health))
         .route("/api/v1/sources", get(list_sources).post(add_source))
@@ -301,7 +294,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .with_state(backend)
         .layer(Extension(program_root))
-        .layer(middleware::from_fn(guard_local_api));
+        .layer(middleware::from_fn(guard_local_api))
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let address = listen_address()?;
+    let data_dir = env::var("STREAMIO_DATA_DIR").unwrap_or_else(|_| "./data".to_owned());
+    let program_dir = env::var("STREAMIO_MEDIA_DIR").unwrap_or_else(|_| data_dir.clone());
+    std::fs::create_dir_all(&program_dir)?;
+    let program_root = ProgramRoot(FsPath::new(&program_dir).canonicalize()?);
+    let backend = TorrentBackend::open(data_dir.into()).await?;
+    let app = app_router(backend, program_root);
     let listener = TcpListener::bind(address).await?;
     eprintln!("my-streamio: listening on http://{address}");
     axum::serve(listener, app)
