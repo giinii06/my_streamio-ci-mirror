@@ -1,5 +1,6 @@
 stages:
   - smoke
+  - test
 
 runner_smoke:
   stage: smoke
@@ -9,7 +10,23 @@ runner_smoke:
     - test -n "$CI_RUNNER_ID"
     - test -n "$CI_COMMIT_SHA"
     - test -f README.md
+    - sh -n tests/fixtures/generate.sh
     - printf 'Runner ID %s executed commit %s\n' "$CI_RUNNER_ID" "$CI_COMMIT_SHORT_SHA"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+rust_verify:
+  stage: test
+  image: rust:1.91.1-bookworm
+  variables:
+    CARGO_TERM_COLOR: never
+  script:
+    - rustc --version
+    - cargo fmt --all -- --check
+    - cargo test --workspace
+    - cargo clippy --workspace --all-targets -- -D warnings
+    - cargo build --workspace
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH'

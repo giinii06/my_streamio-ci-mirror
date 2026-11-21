@@ -1,0 +1,12 @@
+[package]
+name = "my-streamio-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+my-streamio-domain = { path = "../../crates/domain" }
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
