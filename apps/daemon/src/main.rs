@@ -55,6 +55,17 @@ async fn list_sources(State(backend): State<TorrentBackend>) -> Result<Json<Valu
     })
 }
 
+
+async fn peer_overview(
+    Path(torrent_id): Path<usize>,
+    State(backend): State<TorrentBackend>,
+) -> Result<Json<Value>, ApiError> {
+    let snapshot = backend.peer_overview(torrent_id).map_err(|_| (
+        StatusCode::NOT_FOUND, Json(json!({"error":"peer_stats_unavailable"}))
+    ))?;
+    Ok(Json(json!(snapshot)))
+}
+
 async fn list_source_files(
     Path(torrent_id): Path<usize>,
     State(backend): State<TorrentBackend>,
@@ -195,6 +206,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/", get(home))
         .route("/healthz", get(health))
         .route("/api/v1/sources", get(list_sources).post(add_source))
+        .route("/api/v1/sources/{torrent_id}/peers", get(peer_overview))
         .route("/api/v1/sources/{torrent_id}/files", get(list_source_files))
         .route(
             "/api/v1/sources/{torrent_id}/files/{file_id}/stream",

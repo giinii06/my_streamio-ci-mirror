@@ -5,7 +5,14 @@ use anyhow::{anyhow, bail, Context, Result};
 use librqbit::{api::TorrentIdOrHash, AddTorrent, Api, Session};
 use my_streamio_domain::SwarmKey;
 use serde_json::Value;
-use std::{io::SeekFrom, net::IpAddr, path::PathBuf, time::Duration};
+use std::{
+    collections::HashMap,
+    io::SeekFrom,
+    net::IpAddr,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use url::Url;
 
@@ -15,6 +22,69 @@ const MAX_TRACKERS: usize = 32;
 #[derive(Clone)]
 pub struct TorrentBackend {
     api: Api,
+    peer_samples: Arc<Mutex<HashMap<usize, PeerWindow>>>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct PeerCounter {
+    fetched_bytes: u64,
+    checked_pieces: u64,
+}
+
+struct PeerWindow {
+    at: Instant,
+    counters: HashMap<String, PeerCounter>,
+}
+
+/// All values are scoped to one infohash. Peer endpoint addresses are never
+/// returned to the browser. Downloaded bytes are NOT equated with verified bytes.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct PeerOverview {
+    pub connected_peers: usize,
+    pub contributing_peers: usize,
+    pub fetched_bytes_per_sec: u64,
+    pub checked_pieces_in_window: u64,
+    pub window_ms: u64,
+    pub has_baseline: bool,
+}
+
+fn summarize_peer_window(
+    previous: Option<(u64, &HashMap<String, PeerCounter>)>,
+    current: &HashMap<String, PeerCounter>,
+) -> PeerOverview {
+    let mut overview = PeerOverview {
+        connected_peers: current.len(),
+        contributing_peers: 0,
+        fetched_bytes_per_sec: 0,
+        checked_pieces_in_window: 0,
+        window_ms: previous.map_or(0, |(duration, _)| duration),
+        has_baseline: previous.is_some(),
+    };
+
+    if let Some((duration_ms, old)) = previous {
+        let mut fetched = 0_u64;
+        for (peer, new) in current {
+            // Unknown/reconnected peers need a second observation before
+            // they can count as useful, otherwise old counters skew rates.
+            if let Some(before) = old.get(peer) {
+                let checked = new.checked_pieces.saturating_sub(before.checked_pieces);
+                if checked != 0 {
+                    overview.contributing_peers += 1;
+                    overview.checked_pieces_in_window =
+                        overview.checked_pieces_in_window.saturating_add(checked);
+                }
+                fetched = fetched.saturating_add(
+                    new.fetched_bytes.saturating_sub(before.fetched_bytes),
+                );
+            }
+        }
+        if duration_ms > 0 {
+            overview.fetched_bytes_per_sec =
+                ((u128::from(fetched) * 1000) / u128::from(duration_ms))
+                    .min(u128::from(u64::MAX)) as u64;
+        }
+    }
+    overview
 }
 
 impl TorrentBackend {
@@ -25,6 +95,7 @@ impl TorrentBackend {
             .context("starting torrent session")?;
         Ok(Self {
             api: Api::new(session, None),
+            peer_samples: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -52,6 +123,35 @@ impl TorrentBackend {
                 })
             }).collect::<Vec<Value>>()
         }))
+    }
+
+    /// Snapshot each connected peer's counters and calculate their change
+    /// since the previous API request. The first sample has no rate estimate.
+    pub fn peer_overview(&self, torrent_id: usize) -> Result<PeerOverview> {
+        let snapshot = self.api.api_peer_stats(
+            TorrentIdOrHash::Id(torrent_id),
+            Default::default(),
+        ).context("live peer statistics unavailable")?;
+
+        let now = Instant::now();
+        let counters: HashMap<String, PeerCounter> = snapshot.peers.into_iter()
+            .map(|(endpoint, stats)| {
+                (endpoint, PeerCounter {
+                    fetched_bytes: stats.counters.fetched_bytes,
+                    checked_pieces: u64::from(stats.counters.downloaded_and_checked_pieces),
+                })
+            }).collect();
+
+        let mut history = self.peer_samples.lock()
+            .map_err(|_| anyhow!("peer statistics store poisoned"))?;
+        let previous = history.get(&torrent_id);
+        let old = previous.map(|entry| (
+            now.duration_since(entry.at).as_millis().min(u128::from(u64::MAX)) as u64,
+            &entry.counters,
+        ));
+        let result = summarize_peer_window(old, &counters);
+        history.insert(torrent_id, PeerWindow { at: now, counters });
+        Ok(result)
     }
 
     /// Return file metadata without disclosing host storage paths.
@@ -238,6 +338,43 @@ mod tests {
         assert!(validate_magnet("https://example.com/").is_err());
         assert!(validate_magnet("magnet:?dn=movie").is_err());
         assert!(validate_magnet(&"a".repeat(MAX_MAGNET_BYTES + 1)).is_err());
+    }
+
+
+    #[test]
+    fn peer_metrics_only_credit_observed_verified_piece_progress() {
+        let mut old = HashMap::new();
+        old.insert("private-endpoint".to_owned(), PeerCounter {
+            fetched_bytes: 10_000, checked_pieces: 5,
+        });
+        let mut current = HashMap::new();
+        current.insert("private-endpoint".to_owned(), PeerCounter {
+            fetched_bytes: 24_000, checked_pieces: 7,
+        });
+        current.insert("just-connected".to_owned(), PeerCounter {
+            fetched_bytes: 30_000, checked_pieces: 2,
+        });
+        let overview = summarize_peer_window(Some((2000, &old)), &current);
+        assert_eq!(overview.connected_peers, 2);
+        assert_eq!(overview.contributing_peers, 1);
+        assert_eq!(overview.checked_pieces_in_window, 2);
+        assert_eq!(overview.fetched_bytes_per_sec, 7_000);
+        let public = serde_json::to_string(&overview).unwrap();
+        assert!(!public.contains("private-endpoint"));
+        assert!(!public.contains("just-connected"));
+    }
+
+    #[test]
+    fn first_peer_sample_does_not_fabricate_activity() {
+        let mut current = HashMap::new();
+        current.insert("peer".to_owned(), PeerCounter {
+            fetched_bytes: 1234, checked_pieces: 2,
+        });
+        let result = summarize_peer_window(None, &current);
+        assert!(!result.has_baseline);
+        assert_eq!(result.connected_peers, 1);
+        assert_eq!(result.contributing_peers, 0);
+        assert_eq!(result.fetched_bytes_per_sec, 0);
     }
 
     #[test]

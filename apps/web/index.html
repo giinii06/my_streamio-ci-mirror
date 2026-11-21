@@ -120,6 +120,33 @@
               }
             });
             item.appendChild(filesButton);
+            const peersButton = document.createElement("button");
+            peersButton.type = "button";
+            peersButton.className = "secondary";
+            peersButton.textContent = "Measure peers";
+            peersButton.addEventListener("click", async () => {
+              try {
+                const response = await fetch("/api/v1/sources/" + torrent.id + "/peers", {cache:"no-store"});
+                if (!response.ok) throw new Error("Peer details not yet available");
+                const metrics = await response.json();
+                const summary = document.createElement("span");
+                summary.className = "muted";
+                summary.textContent = metrics.has_baseline
+                  ? "Connected " + metrics.connected_peers +
+                    " · Verified-piece contributors " + metrics.contributing_peers +
+                    " · Received " + (metrics.fetched_bytes_per_sec / 1024).toFixed(0) + " KiB/s" +
+                    " (received bytes are not necessarily verified bytes)"
+                  : "Connected " + metrics.connected_peers +
+                    " · First measurement — click again after an interval for rates";
+                const old = item.querySelector("[data-peer-summary]");
+                if (old) old.remove();
+                summary.dataset.peerSummary = "true";
+                item.appendChild(summary);
+              } catch (error) {
+                message.textContent = error.message || "Could not measure peers";
+              }
+            });
+            item.appendChild(peersButton);
           }
           list.appendChild(item);
         }
