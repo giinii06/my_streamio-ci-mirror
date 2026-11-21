@@ -6,13 +6,13 @@ Updated 2026-11-22. All entries marked **unverified** until an exact HEAD SHA Gi
 |---|---|---|
 | 00 | Synthetic FFmpeg fixture generator; `tests/fixtures/generate.sh` | GitLab Runner smoke passed at `8f54c136`; actual FFmpeg fixture generation not executed in CI |
 | 01 | Rust workspace, domain types, loopback daemon, Rust CI | Rust build/test pending runner |
-| 02 | librqbit session, magnet validation, add/list API | No live peer/file streaming integration or backend comparison benchmark |
+| 02 | librqbit session, magnet validation, add/list API | Source files and Range API added, but no actual verified-byte streaming test or backend benchmark |
 | 03 | Budgeted multi-swarm registry, useful peer scoring | Not wired to actual librqbit peer stats or DHT/tracker events |
-| 04 | Time-indexed demands, piece mapping, byte range, seek generations | Not wired to actual piece request/read or player |
+| 04 | Time-indexed demands, piece mapping, byte range, seek generations | Includes HTTP Range endpoint calling librqbit verified file stream; uncompiled and unverified against real media |
 | 05 | Complete single-file v1 verification, target-piece hash recheck | No sparse storage, v2 proof or real reuse across two live torrents |
 | 06 | Affine timeline alignment from provided evidence | No video fingerprint extraction or edited-cut piecewise alignment |
 | 07 | FFmpeg video segment renderer with output validation | No audio continuity, HLS manifests, cross-encode seamless playback |
-| 08 | Local source manager UI | Not a streaming player yet |
+| 08 | Local source manager UI | Local player has single-source byte-range URL; real video startup/seek test pending |
 | 09 | VideoToolbox encoder discovery probe | Not benchmarked or integrated as active encoder on user's Mac M5 |
 | 10 | Playback event metric aggregation | Not connected to running daemon or comparative benchmark |
 | 11 | Magnet restrictions, loopback, origin/host guard | Security review, fuzzing, limits and production hardening incomplete |

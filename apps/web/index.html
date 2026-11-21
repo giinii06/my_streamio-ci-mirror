@@ -54,7 +54,12 @@
     <p class="muted">Sources are independent swarms; discovered peers do not imply usable download contributors.</p>
     <ul id="sources"><li class="muted empty">Checking backend…</li></ul>
   </section>
-  <p class="muted">Streaming, alignment and live quality-switching are not yet exposed here. All data stays on your machine.</p>
+  <section class="panel" aria-labelledby="player-title">
+    <h2 id="player-title">Single-source playback</h2>
+    <p class="muted">Stream a compatible MP4/WebM from one selected torrent. Multi-encode source switching is not integrated yet.</p>
+    <video id="player" controls preload="metadata" playsinline style="width:100%;background:#000;border-radius:10px"></video>
+  </section>
+  <p class="muted">Torrent activity communicates with external peers and trackers. Only use media you are authorized to share.</p>
   <script>
     "use strict";
     const message = document.getElementById("message");
@@ -81,6 +86,41 @@
           info.className = "muted";
           info.textContent = "Infohash: " + (torrent.info_hash || "unknown");
           item.append(name, info);
+          if (Number.isSafeInteger(torrent.id)) {
+            const filesButton = document.createElement("button");
+            filesButton.type = "button";
+            filesButton.className = "secondary";
+            filesButton.textContent = "Show playable files";
+            filesButton.addEventListener("click", async () => {
+              filesButton.disabled = true;
+              try {
+                const response = await fetch("/api/v1/sources/" + torrent.id + "/files");
+                if (!response.ok) throw new Error("Torrent metadata not available");
+                const details = await response.json();
+                const files = Array.isArray(details.files) ? details.files : [];
+                const videos = files.filter(f => f.included && /\\.(mp4|m4v|webm)$/i.test(f.name));
+                if (!videos.length) message.textContent = "No playable MP4/WebM found (metadata may still be loading).";
+                for (const file of videos) {
+                  const play = document.createElement("button");
+                  play.type = "button";
+                  play.className = "secondary";
+                  play.textContent = "Play " + file.name;
+                  play.addEventListener("click", () => {
+                    const player = document.getElementById("player");
+                    player.src = "/api/v1/sources/" + torrent.id + "/files/" + file.id + "/stream";
+                    player.load();
+                    player.scrollIntoView({behavior:"smooth",block:"center"});
+                  });
+                  item.appendChild(play);
+                }
+              } catch (error) {
+                message.textContent = error.message || "Could not read files";
+              } finally {
+                filesButton.disabled = false;
+              }
+            });
+            item.appendChild(filesButton);
+          }
           list.appendChild(item);
         }
       } catch {

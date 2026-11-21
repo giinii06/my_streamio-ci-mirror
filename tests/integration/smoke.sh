@@ -35,6 +35,7 @@ fi
 
 grep -q '"status":"ok"' "$workdir/health.json"
 curl --max-time 5 --fail --silent "http://127.0.0.1:$STREAMIO_PORT/" | grep -q 'My Streamio'
+curl --max-time 5 --fail --silent "http://127.0.0.1:$STREAMIO_PORT/" | grep -q 'Single-source playback'
 curl --max-time 5 --fail --silent "http://127.0.0.1:$STREAMIO_PORT/api/v1/sources" | grep -q '"torrents"'
 bad_host="$(curl --max-time 5 --silent -o /dev/null -w '%{http_code}' \
   -H 'Host: attacker.example' "http://127.0.0.1:$STREAMIO_PORT/healthz")"
