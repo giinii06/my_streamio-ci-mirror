@@ -22,9 +22,10 @@ impl VideoEncoder {
 pub fn choose_encoder(is_macos: bool, prefer_hardware: bool, encoders: &str) -> VideoEncoder {
     if is_macos
         && prefer_hardware
-        && encoders
-            .lines()
-            .any(|line| line.split_whitespace().any(|word| word == "h264_videotoolbox"))
+        && encoders.lines().any(|line| {
+            line.split_whitespace()
+                .any(|word| word == "h264_videotoolbox")
+        })
     {
         VideoEncoder::H264VideoToolbox
     } else {
@@ -57,10 +58,16 @@ mod tests {
     #[test]
     fn uses_hardware_only_on_mac_when_encoder_is_listed() {
         let sample = " V..... libx264\n V..... h264_videotoolbox\n";
-        assert_eq!(choose_encoder(true, true, sample), VideoEncoder::H264VideoToolbox);
+        assert_eq!(
+            choose_encoder(true, true, sample),
+            VideoEncoder::H264VideoToolbox
+        );
         assert_eq!(choose_encoder(false, true, sample), VideoEncoder::Libx264);
         assert_eq!(choose_encoder(true, false, sample), VideoEncoder::Libx264);
-        assert_eq!(choose_encoder(true, true, " V..... libx264"), VideoEncoder::Libx264);
+        assert_eq!(
+            choose_encoder(true, true, " V..... libx264"),
+            VideoEncoder::Libx264
+        );
     }
 
     #[test]

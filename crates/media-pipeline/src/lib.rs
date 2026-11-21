@@ -29,7 +29,10 @@ impl SegmentJob {
     pub fn validate(&self) -> Result<()> {
         if self.id.is_empty()
             || self.id.len() > 80
-            || !self.id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
+            || !self
+                .id
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-')
         {
             bail!("invalid segment id");
         }
@@ -175,7 +178,9 @@ mod tests {
     fn keeps_all_user_supplied_paths_as_process_arguments() {
         let args = job().ffmpeg_args(Path::new("/tmp/segment.mp4")).unwrap();
         assert_eq!(args[args.len() - 1], "/tmp/segment.mp4");
-        assert!(args.windows(2).any(|pair| pair == ["-i", "/approved/source.mp4"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-i", "/approved/source.mp4"]));
         assert!(args.contains(&"-an".to_owned()));
     }
 

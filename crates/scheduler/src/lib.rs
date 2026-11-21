@@ -43,11 +43,13 @@ pub struct MediaIndex {
 
 impl MediaIndex {
     pub fn new(spans: Vec<IndexedSpan>, file_length: u64) -> Result<Self, &'static str> {
-        if spans.is_empty() || spans.iter().any(|span| {
-            span.time_start_ms >= span.time_end_ms
-                || span.bytes.start >= span.bytes.end
-                || span.bytes.end > file_length
-        }) {
+        if spans.is_empty()
+            || spans.iter().any(|span| {
+                span.time_start_ms >= span.time_end_ms
+                    || span.bytes.start >= span.bytes.end
+                    || span.bytes.end > file_length
+            })
+        {
             return Err("invalid media index");
         }
         if spans
@@ -116,7 +118,9 @@ pub fn map_to_pieces(
 /// Parser for one RFC 7233-style "bytes=start-end" request.
 /// Multiple/suffix ranges are explicitly unsupported rather than silently misread.
 pub fn parse_http_range(header: &str, length: u64) -> Result<ByteRange, &'static str> {
-    let data = header.strip_prefix("bytes=").ok_or("unsupported range unit")?;
+    let data = header
+        .strip_prefix("bytes=")
+        .ok_or("unsupported range unit")?;
     if data.contains(',') {
         return Err("multipart byte ranges are unsupported");
     }
@@ -185,7 +189,10 @@ mod tests {
     fn maps_file_boundary_and_inclusive_last_piece() {
         let range = ByteRange::new(3, 17).unwrap();
         let demands = map_to_pieces(14, range, 8, 5, 2000).unwrap();
-        assert_eq!(demands.iter().map(|p| p.index).collect::<Vec<_>>(), vec![2, 3]);
+        assert_eq!(
+            demands.iter().map(|p| p.index).collect::<Vec<_>>(),
+            vec![2, 3]
+        );
         assert!(demands.iter().all(|p| p.generation == 5));
     }
 
@@ -197,17 +204,38 @@ mod tests {
 
     #[test]
     fn no_linear_time_to_byte_assumption() {
-        let index = MediaIndex::new(vec![
-            IndexedSpan { time_start_ms: 0, time_end_ms: 1000, bytes: ByteRange::new(0, 90).unwrap() },
-            IndexedSpan { time_start_ms: 1000, time_end_ms: 2000, bytes: ByteRange::new(90, 1000).unwrap() },
-        ], 1000).unwrap();
-        assert_eq!(index.required_ranges(1100, 1200), vec![ByteRange::new(90, 1000).unwrap()]);
+        let index = MediaIndex::new(
+            vec![
+                IndexedSpan {
+                    time_start_ms: 0,
+                    time_end_ms: 1000,
+                    bytes: ByteRange::new(0, 90).unwrap(),
+                },
+                IndexedSpan {
+                    time_start_ms: 1000,
+                    time_end_ms: 2000,
+                    bytes: ByteRange::new(90, 1000).unwrap(),
+                },
+            ],
+            1000,
+        )
+        .unwrap();
+        assert_eq!(
+            index.required_ranges(1100, 1200),
+            vec![ByteRange::new(90, 1000).unwrap()]
+        );
     }
 
     #[test]
     fn http_range_inclusive_end_and_bounds() {
-        assert_eq!(parse_http_range("bytes=10-19", 100).unwrap(), ByteRange::new(10, 20).unwrap());
-        assert_eq!(parse_http_range("bytes=95-", 100).unwrap(), ByteRange::new(95, 100).unwrap());
+        assert_eq!(
+            parse_http_range("bytes=10-19", 100).unwrap(),
+            ByteRange::new(10, 20).unwrap()
+        );
+        assert_eq!(
+            parse_http_range("bytes=95-", 100).unwrap(),
+            ByteRange::new(95, 100).unwrap()
+        );
         assert!(parse_http_range("bytes=-5", 100).is_err());
         assert!(parse_http_range("bytes=3-2", 100).is_err());
         assert!(parse_http_range("bytes=1-4,5-8", 100).is_err());

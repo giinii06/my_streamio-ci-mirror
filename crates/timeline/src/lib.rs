@@ -115,7 +115,11 @@ mod tests {
     use super::*;
 
     fn a(source_ms: f64, reference_ms: f64) -> Anchor {
-        Anchor { source_ms, reference_ms, confidence: 0.99 }
+        Anchor {
+            source_ms,
+            reference_ms,
+            confidence: 0.99,
+        }
     }
 
     #[test]

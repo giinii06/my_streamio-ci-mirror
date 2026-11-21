@@ -53,8 +53,7 @@ impl Metrics {
                 self.startups.push_back(duration);
             }
             PlaybackEvent::StallMs(duration) => {
-                self.summary.stall_total_ms =
-                    self.summary.stall_total_ms.saturating_add(duration);
+                self.summary.stall_total_ms = self.summary.stall_total_ms.saturating_add(duration);
             }
             PlaybackEvent::SegmentReady => {
                 self.summary.segment_ready = self.summary.segment_ready.saturating_add(1);

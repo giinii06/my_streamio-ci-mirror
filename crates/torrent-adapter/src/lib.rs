@@ -5,7 +5,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use librqbit::{api::TorrentIdOrHash, AddTorrent, Api, Session};
 use my_streamio_domain::SwarmKey;
 use serde_json::Value;
-use std::{net::IpAddr, path::PathBuf, io::SeekFrom, time::Duration};
+use std::{io::SeekFrom, net::IpAddr, path::PathBuf, time::Duration};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use url::Url;
 
@@ -20,7 +20,9 @@ pub struct TorrentBackend {
 impl TorrentBackend {
     pub async fn open(storage_dir: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&storage_dir).context("creating torrent storage directory")?;
-        let session = Session::new(storage_dir).await.context("starting torrent session")?;
+        let session = Session::new(storage_dir)
+            .await
+            .context("starting torrent session")?;
         Ok(Self {
             api: Api::new(session, None),
         })
@@ -54,27 +56,37 @@ impl TorrentBackend {
 
     /// Return file metadata without disclosing host storage paths.
     pub fn files(&self, torrent_id: usize) -> Result<Vec<PlayableFile>> {
-        let details = self.api
+        let details = self
+            .api
             .api_torrent_details(TorrentIdOrHash::Id(torrent_id))
             .context("torrent not available")?;
         let files = details.files.context("torrent metadata unavailable")?;
-        Ok(files.into_iter().enumerate().map(|(id, file)| PlayableFile {
-            id,
-            name: file.name,
-            length: file.length,
-            included: file.included,
-        }).collect())
+        Ok(files
+            .into_iter()
+            .enumerate()
+            .map(|(id, file)| PlayableFile {
+                id,
+                name: file.name,
+                length: file.length,
+                included: file.included,
+            })
+            .collect())
     }
 
     /// Read only bytes that librqbit has verified against the torrent pieces.
     /// Never open incomplete torrent files through std::fs::File.
     pub async fn read_verified_range(
-        &self, torrent_id: usize, file_id: usize, offset: u64, count: usize,
+        &self,
+        torrent_id: usize,
+        file_id: usize,
+        offset: u64,
+        count: usize,
     ) -> Result<Vec<u8>> {
         if count == 0 || count > MAX_HTTP_CHUNK {
             bail!("requested range exceeds cap");
         }
-        let mut stream = self.api
+        let mut stream = self
+            .api
             .api_stream(TorrentIdOrHash::Id(torrent_id), file_id)
             .context("cannot open torrent file stream")?;
         let read = async {
@@ -150,7 +162,9 @@ fn validate_tracker(raw: &str) -> Result<()> {
     if !matches!(tracker.scheme(), "http" | "https" | "udp") {
         bail!("unsupported tracker protocol");
     }
-    let host = tracker.host_str().ok_or_else(|| anyhow!("tracker has no host"))?;
+    let host = tracker
+        .host_str()
+        .ok_or_else(|| anyhow!("tracker has no host"))?;
     if host.eq_ignore_ascii_case("localhost") || host.ends_with(".localhost") {
         bail!("local tracker not allowed by default");
     }

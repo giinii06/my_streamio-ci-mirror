@@ -34,8 +34,7 @@ impl PeerSnapshot {
     /// Higher priority for peers supplying relevant verified data. Never equate
     /// a discovered endpoint with a contributing peer.
     pub fn utility(&self) -> u128 {
-        u128::from(self.verified_bytes_per_sec)
-            * u128::from(self.needed_range_available_percent)
+        u128::from(self.verified_bytes_per_sec) * u128::from(self.needed_range_available_percent)
             / 100
             + self.useful as u128 * 1024
     }
@@ -187,11 +186,17 @@ mod tests {
     fn rejects_impossible_peer_statistics() {
         let mut r = SwarmRegistry::new(1, 1).unwrap();
         r.register(hash(1)).unwrap();
-        assert!(r.update(&hash(1), SwarmState::Supplying, PeerSnapshot {
-            discovered: 5,
-            connected: 6,
-            ..PeerSnapshot::default()
-        }).is_err());
+        assert!(r
+            .update(
+                &hash(1),
+                SwarmState::Supplying,
+                PeerSnapshot {
+                    discovered: 5,
+                    connected: 6,
+                    ..PeerSnapshot::default()
+                }
+            )
+            .is_err());
     }
 
     #[test]

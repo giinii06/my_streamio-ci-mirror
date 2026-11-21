@@ -11,7 +11,9 @@ impl ContentId {
     pub fn parse(raw: &str) -> Result<Self, &'static str> {
         if raw.len() > 80
             || raw.is_empty()
-            || !raw.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            || !raw
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
         {
             return Err("content id must contain 1..80 ASCII alphanumeric or dash characters");
         }
@@ -37,7 +39,9 @@ impl SourceId {
     pub fn parse(raw: &str) -> Result<Self, &'static str> {
         if raw.len() > 80
             || raw.is_empty()
-            || !raw.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            || !raw
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
         {
             return Err("source id must contain 1..80 ASCII alphanumeric or dash characters");
         }
@@ -70,7 +74,9 @@ impl SwarmKey {
     }
 
     pub fn parse_btmh(hex: &str) -> Result<Self, &'static str> {
-        let digest = hex.strip_prefix("1220").ok_or("expected sha256 multihash prefix")?;
+        let digest = hex
+            .strip_prefix("1220")
+            .ok_or("expected sha256 multihash prefix")?;
         let bytes = decode_hex::<32>(digest)?;
         Ok(Self::V2(bytes))
     }
@@ -111,8 +117,14 @@ mod tests {
 
     #[test]
     fn validates_v1_and_v2_swarm_hash_lengths() {
-        assert!(matches!(SwarmKey::parse_btih(&"a".repeat(40)), Ok(SwarmKey::V1(_))));
-        assert!(matches!(SwarmKey::parse_btmh(&format!("1220{}", "f".repeat(64))), Ok(SwarmKey::V2(_))));
+        assert!(matches!(
+            SwarmKey::parse_btih(&"a".repeat(40)),
+            Ok(SwarmKey::V1(_))
+        ));
+        assert!(matches!(
+            SwarmKey::parse_btmh(&format!("1220{}", "f".repeat(64))),
+            Ok(SwarmKey::V2(_))
+        ));
         assert!(SwarmKey::parse_btih(&"g".repeat(40)).is_err());
         assert!(SwarmKey::parse_btmh(&"f".repeat(64)).is_err());
     }

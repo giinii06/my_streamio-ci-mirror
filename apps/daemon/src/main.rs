@@ -2,13 +2,13 @@ use axum::{
     extract::{Path, Request, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     middleware::{self, Next},
-    response::{IntoResponse, Response},
     response::Html,
+    response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
-use my_streamio_torrent_adapter::{TorrentBackend, MAX_HTTP_CHUNK};
 use my_streamio_scheduler::{parse_http_range, ByteRange};
+use my_streamio_torrent_adapter::{TorrentBackend, MAX_HTTP_CHUNK};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{env, net::SocketAddr};
@@ -33,31 +33,38 @@ async fn add_source(
     State(backend): State<TorrentBackend>,
     Json(request): Json<AddSource>,
 ) -> Result<Json<Value>, ApiError> {
-    let source = backend
-        .add_magnet(&request.magnet)
-        .await
-        .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({
-            "error": "invalid_or_unavailable_source"
-        }))))?;
+    let source = backend.add_magnet(&request.magnet).await.map_err(|_| {
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({
+                "error": "invalid_or_unavailable_source"
+            })),
+        )
+    })?;
     Ok(Json(source))
 }
 
 async fn list_sources(State(backend): State<TorrentBackend>) -> Result<Json<Value>, ApiError> {
-    backend
-        .list_torrents()
-        .map(Json)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-            "error": "backend_unavailable"
-        }))))
+    backend.list_torrents().map(Json).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "backend_unavailable"
+            })),
+        )
+    })
 }
-
 
 async fn list_source_files(
     Path(torrent_id): Path<usize>,
     State(backend): State<TorrentBackend>,
 ) -> Result<Json<Value>, ApiError> {
-    let files = backend.files(torrent_id)
-        .map_err(|_| (StatusCode::NOT_FOUND, Json(json!({"error":"source_or_metadata_not_found"}))))?;
+    let files = backend.files(torrent_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error":"source_or_metadata_not_found"})),
+        )
+    })?;
     Ok(Json(json!({"files":files})))
 }
 
@@ -87,19 +94,37 @@ async fn stream_source_file(
     let span = match requested {
         Some(request) => match parse_http_range(request, total) {
             Ok(range) => range,
-            Err(_) => return (StatusCode::RANGE_NOT_SATISFIABLE, "Unsupported byte Range").into_response(),
+            Err(_) => {
+                return (StatusCode::RANGE_NOT_SATISFIABLE, "Unsupported byte Range")
+                    .into_response()
+            }
         },
         None => match ByteRange::new(0, total.min(MAX_HTTP_CHUNK as u64)) {
             Ok(range) => range,
             Err(_) => return (StatusCode::RANGE_NOT_SATISFIABLE, "Empty file").into_response(),
         },
     };
-    let end = span.start.saturating_add(MAX_HTTP_CHUNK as u64).min(span.end);
-    let bytes = match backend.read_verified_range(torrent_id, file_id, span.start, (end - span.start) as usize).await {
+    let end = span
+        .start
+        .saturating_add(MAX_HTTP_CHUNK as u64)
+        .min(span.end);
+    let bytes = match backend
+        .read_verified_range(torrent_id, file_id, span.start, (end - span.start) as usize)
+        .await
+    {
         Ok(bytes) => bytes,
-        Err(_) => return (StatusCode::SERVICE_UNAVAILABLE, "Verified bytes not ready").into_response(),
+        Err(_) => {
+            return (StatusCode::SERVICE_UNAVAILABLE, "Verified bytes not ready").into_response()
+        }
     };
-    let media_type = match file.name.rsplit('.').next().unwrap_or("").to_ascii_lowercase().as_str() {
+    let media_type = match file
+        .name
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "mp4" | "m4v" => "video/mp4",
         "webm" => "video/webm",
         "mp3" => "audio/mpeg",
@@ -110,7 +135,9 @@ async fn stream_source_file(
     let response_headers = response.headers_mut();
     response_headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
     response_headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(media_type));
-    if let Ok(header_value) = HeaderValue::from_str(&format!("bytes {}-{}/{total}", span.start, end-1)) {
+    if let Ok(header_value) =
+        HeaderValue::from_str(&format!("bytes {}-{}/{total}", span.start, end - 1))
+    {
         response_headers.insert(header::CONTENT_RANGE, header_value);
     }
     response
@@ -169,7 +196,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/healthz", get(health))
         .route("/api/v1/sources", get(list_sources).post(add_source))
         .route("/api/v1/sources/{torrent_id}/files", get(list_source_files))
-        .route("/api/v1/sources/{torrent_id}/files/{file_id}/stream", get(stream_source_file))
+        .route(
+            "/api/v1/sources/{torrent_id}/files/{file_id}/stream",
+            get(stream_source_file),
+        )
         .with_state(backend)
         .layer(middleware::from_fn(guard_local_api));
     let listener = TcpListener::bind(address).await?;

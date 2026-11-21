@@ -66,7 +66,9 @@ impl VerifiedObject {
         if piece_size == 0 {
             return Err("invalid target piece size");
         }
-        let start = index.checked_mul(piece_size).ok_or("piece offset overflow")?;
+        let start = index
+            .checked_mul(piece_size)
+            .ok_or("piece offset overflow")?;
         if start >= self.len() {
             return Err("piece outside file");
         }
@@ -118,15 +120,24 @@ mod tests {
     #[test]
     fn accepts_source_and_rechecks_different_target_piece_size() {
         let bytes = b"ABCDEFGHIJ".to_vec();
-        let source = VerifiedObject::from_single_file_v1(
-            bytes.clone(),
-            4,
-            &piece_hashes(&bytes, 4),
-        )
-        .unwrap();
+        let source =
+            VerifiedObject::from_single_file_v1(bytes.clone(), 4, &piece_hashes(&bytes, 4))
+                .unwrap();
         let alternate_hashes = piece_hashes(&bytes, 6);
-        assert_eq!(source.verified_target_piece(0, 6, alternate_hashes[0]).unwrap().as_slice(), b"ABCDEF");
-        assert_eq!(source.verified_target_piece(1, 6, alternate_hashes[1]).unwrap().as_slice(), b"GHIJ");
+        assert_eq!(
+            source
+                .verified_target_piece(0, 6, alternate_hashes[0])
+                .unwrap()
+                .as_slice(),
+            b"ABCDEF"
+        );
+        assert_eq!(
+            source
+                .verified_target_piece(1, 6, alternate_hashes[1])
+                .unwrap()
+                .as_slice(),
+            b"GHIJ"
+        );
         let mut store = VerifiedStore::default();
         let id = store.insert(source.clone());
         store.insert(source);
@@ -142,8 +153,7 @@ mod tests {
         assert!(VerifiedObject::from_single_file_v1(data.clone(), 4, &source_hashes).is_err());
 
         let source =
-            VerifiedObject::from_single_file_v1(data.clone(), 4, &piece_hashes(&data, 4))
-                .unwrap();
+            VerifiedObject::from_single_file_v1(data.clone(), 4, &piece_hashes(&data, 4)).unwrap();
         assert!(source.verified_target_piece(0, 6, [0; 20]).is_err());
         assert!(source.verified_target_piece(2, 6, [0; 20]).is_err());
     }
@@ -153,8 +163,9 @@ mod tests {
         assert!(VerifiedObject::from_single_file_v1(vec![], 4, &[]).is_err());
         let data = b"x".to_vec();
         let object =
-            VerifiedObject::from_single_file_v1(data.clone(), 1, &piece_hashes(&data, 1))
-                .unwrap();
-        assert!(object.verified_target_piece(usize::MAX, 4, [0; 20]).is_err());
+            VerifiedObject::from_single_file_v1(data.clone(), 1, &piece_hashes(&data, 1)).unwrap();
+        assert!(object
+            .verified_target_piece(usize::MAX, 4, [0; 20])
+            .is_err());
     }
 }
