@@ -27,3 +27,17 @@ Testing separately encoded MPEG-TS video/audio segments with a naive playlist yi
 - Generate live HLS playlists from a buffer with generation-fenced manifests.
 - Benchmark VideoToolbox on native Mac M5 and Linux CPU fallback.
 - Test video frame gaps, audio delay, HDR/SDR and interruptions under real network conditions.
+
+## Preview the generated HLS playlist in the local player
+
+After running `sh tests/integration/hls.sh`, run the native daemon with this fixture root:
+
+```bash
+STREAMIO_MEDIA_DIR="$PWD/tests/fixtures/generated" \
+  STREAMIO_DATA_DIR="$PWD/tests/fixtures/generated/torrents" \
+  cargo run --bin my-streamio-daemon
+```
+
+Open `http://127.0.0.1:3031` in Safari, use program ID `integration-switch`, and select **Play HLS**. The local server exposes only `playlist.m3u8` and `segNNNNN.ts` assets from bounded program directories, never raw downloaded files or logs.
+
+Browser playback is a separate acceptance gate: the synthetic command-line decode does not prove Safari or Chrome will render the program without glitches. Safari supports HLS natively; Chrome may need a dedicated HLS JavaScript player.
