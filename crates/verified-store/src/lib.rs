@@ -1,6 +1,9 @@
 //! Strict, in-memory whole-file identity proof and target piece re-verification.
 //! Initial v1/single-file scope: multi-file boundary, sparse piece data and BEP52
 //! Merkle verification must be implemented before using this for those torrents.
+//! The sparse module implements strictly proven single-file v1 ranges only.
+
+pub mod sparse;
 
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
