@@ -1,0 +1,96 @@
+name: Mirrored Rust + HLS CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/**'
+      - 'ci/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Avoid paying for obsolete runs while keeping distinct branches independent.
+concurrency:
+  group: mirrored-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Existing, verified ci-hub contract from the ci-hub-smoke repository.
+  rust-hub:
+    name: Rust workspace / ci-hub
+    uses: giinii06/ci-hub/.github/workflows/ci.yml@v1
+    with:
+      stack: rust
+      directory: "."
+
+  # Different GitHub runner, with NO 'needs' edge to the Rust hub job.
+  # This exercises FFmpeg against actual generated H.264/HEVC inputs.
+  media-hls:
+    name: H.264 + HEVC continuous HLS / Ubuntu
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - name: Checkout mirrored source
+        uses: actions/checkout@v4
+
+      - name: Show exact mirrored commit
+        run: |
+          echo "Github mirror commit: $(git rev-parse HEAD)"
+          echo "GitLab source must have the exact same SHA for comparable results."
+          test -f Cargo.toml
+          test -f rust-toolchain.toml
+          test -f tests/integration/hls.sh
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal --component rustfmt,clippy
+          rustc --version
+          cargo --version
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: github-hls-rust100
+          cache-targets: true
+
+      - name: Install FFmpeg / FFprobe
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ffmpeg
+          ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libx264
+          ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libx265
+
+      - name: Run real HLS video + audio integration test
+        run: |
+          sh -n tests/integration/hls.sh
+          sh tests/integration/hls.sh
+
+  # Independent Clippy/static tests: catches a failure even if ci-hub's
+  # implementation of the 'rust' stack changes.
+  rust-policy:
+    name: Clippy / all targets / Ubuntu
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt,clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: github-clippy-rust100
+          cache-targets: true
+      - name: Lint and check compile on actual mirror SHA
+        run: |
+          git rev-parse HEAD
+          cargo fmt --all
+          git diff --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo build --workspace

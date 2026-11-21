@@ -71,6 +71,9 @@ rust_verify:
 # H.264→HEVC→H.264 HLS output with a continuous primary audio track.
 media_hls_verify:
   stage: media
+  # Independent of rust_verify: schedule both at once. An individual
+  # Oracle runner may still serialize them if it has only one executor slot.
+  needs: []
   image: rust:1.100.0-bookworm
   variables:
     CARGO_TERM_COLOR: never
