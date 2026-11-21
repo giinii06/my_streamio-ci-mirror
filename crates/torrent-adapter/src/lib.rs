@@ -4,6 +4,7 @@
 use anyhow::{anyhow, bail, Context, Result};
 use librqbit::{api::TorrentIdOrHash, AddTorrent, Api, Session};
 use my_streamio_domain::SwarmKey;
+use my_streamio_discovery::SwarmRegistry;
 use serde_json::Value;
 use std::{
     collections::HashMap,
@@ -23,6 +24,7 @@ const MAX_TRACKERS: usize = 32;
 pub struct TorrentBackend {
     api: Api,
     peer_samples: Arc<Mutex<HashMap<usize, PeerWindow>>>,
+    admissions: Arc<Mutex<SwarmRegistry>>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -93,24 +95,73 @@ impl TorrentBackend {
         let session = Session::new(storage_dir)
             .await
             .context("starting torrent session")?;
+        let max_sources = match std::env::var("STREAMIO_MAX_SWARMS") {
+            Ok(raw) => raw.parse::<usize>().context("invalid STREAMIO_MAX_SWARMS")?,
+            Err(std::env::VarError::NotPresent) => 32,
+            Err(error) => return Err(error.into()),
+        };
+        if !(1..=128).contains(&max_sources) {
+            bail!("STREAMIO_MAX_SWARMS must be in 1..=128");
+        }
+        let admissions = SwarmRegistry::new(max_sources, max_sources.min(8))
+            .map_err(|error| anyhow!(error))?;
         Ok(Self {
             api: Api::new(session, None),
             peer_samples: Arc::new(Mutex::new(HashMap::new())),
+            admissions: Arc::new(Mutex::new(admissions)),
         })
     }
 
     pub async fn add_magnet(&self, magnet: &str) -> Result<Value> {
-        validate_magnet(magnet)?;
-        let response = self
+        let key = validate_magnet(magnet)?;
+        {
+            let mut registry = self.admissions.lock()
+                .map_err(|_| anyhow!("swarm registry poisoned"))?;
+            if !registry.register(key.clone()).map_err(|reason| anyhow!(reason))? {
+                bail!("this infohash is already registered or in progress");
+            }
+        }
+
+        // A failed magnet fetch must not exhaust the source budget. Never
+        // hold the synchronous admission mutex across an async network call.
+        let request = self
             .api
             .api_add_torrent(AddTorrent::from_url(magnet), None)
-            .await
-            .context("librqbit add_torrent failed")?;
-        Ok(serde_json::json!({
-            "id": response.id,
-            "info_hash": response.details.info_hash,
-            "name": response.details.name
-        }))
+            .await;
+        match request {
+            Ok(response) => {
+                if response.id.is_none() {
+                    let mut registry = self.admissions.lock()
+                        .map_err(|_| anyhow!("swarm registry poisoned"))?;
+                    registry.remove(&key);
+                }
+                Ok(serde_json::json!({
+                    "id": response.id,
+                    "info_hash": response.details.info_hash,
+                    "name": response.details.name
+                }))
+            }
+            Err(error) => {
+                let mut registry = self.admissions.lock()
+                    .map_err(|_| anyhow!("swarm registry poisoned"))?;
+                registry.remove(&key);
+                Err(anyhow!(error).context("librqbit add_torrent failed"))
+            }
+        }
+    }
+
+    pub fn swarms(&self) -> Result<Value> {
+        let registry = self.admissions.lock()
+            .map_err(|_| anyhow!("swarm registry poisoned"))?;
+        let rows: Vec<Value> = registry.snapshot().into_iter()
+            .map(|entry| serde_json::json!({
+                "info_hash": entry.key.as_hex(),
+                "state": entry.state,
+                "connected_peers": entry.stats.connected,
+                "useful_peers": entry.stats.useful
+            }))
+            .collect();
+        Ok(serde_json::json!({"swarms": rows}))
     }
 
     pub fn list_torrents(&self) -> Result<Value> {

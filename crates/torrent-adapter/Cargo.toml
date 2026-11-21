@@ -8,6 +8,7 @@ license.workspace = true
 anyhow.workspace = true
 librqbit.workspace = true
 my-streamio-domain = { path = "../domain" }
+my-streamio-discovery = { path = "../discovery" }
 serde.workspace = true
 serde_json.workspace = true
 url.workspace = true

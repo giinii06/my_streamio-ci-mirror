@@ -87,6 +87,11 @@ impl SwarmRegistry {
         Ok(true)
     }
 
+    /// A failed source admission must free its reserved slot.
+    pub fn remove(&mut self, key: &SwarmKey) -> bool {
+        self.entries.remove(key).is_some()
+    }
+
     pub fn update(
         &mut self,
         key: &SwarmKey,
@@ -168,6 +173,16 @@ mod tests {
         assert!(!r.register(hash(1)).unwrap());
         assert!(r.register(hash(2)).unwrap());
         assert!(r.register(hash(3)).is_err());
+    }
+
+    #[test]
+    fn failed_registration_releases_capacity() {
+        let mut registry = SwarmRegistry::new(1, 1).unwrap();
+        assert!(registry.register(hash(1)).unwrap());
+        assert!(registry.register(hash(2)).is_err());
+        assert!(registry.remove(&hash(1)));
+        assert!(!registry.remove(&hash(1)));
+        assert!(registry.register(hash(2)).unwrap());
     }
 
     #[test]

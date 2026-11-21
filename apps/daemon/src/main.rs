@@ -66,6 +66,13 @@ async fn peer_overview(
     Ok(Json(json!(snapshot)))
 }
 
+async fn list_swarms(State(backend): State<TorrentBackend>) -> Result<Json<Value>, ApiError> {
+    backend.swarms().map(Json).map_err(|_| (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({"error":"swarm_registry_unavailable"}))
+    ))
+}
+
 async fn list_source_files(
     Path(torrent_id): Path<usize>,
     State(backend): State<TorrentBackend>,
@@ -283,6 +290,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/", get(home))
         .route("/healthz", get(health))
         .route("/api/v1/sources", get(list_sources).post(add_source))
+        .route("/api/v1/swarms", get(list_swarms))
         .route("/api/v1/sources/{torrent_id}/peers", get(peer_overview))
         .route("/api/v1/programs/{program_id}/playlist.m3u8", get(program_playlist))
         .route("/api/v1/programs/{program_id}/{segment_name}", get(program_segment))
