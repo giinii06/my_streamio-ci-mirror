@@ -27,8 +27,9 @@ runner_smoke:
     - test -f docs/IMPLEMENTATION_STATUS.md
     - printf 'Runner ID %s executed commit %s\n' "$CI_RUNNER_ID" "$CI_COMMIT_SHORT_SHA"
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH'
+    # Keep the original smoke job for main; feature/MR Rust jobs include
+    # these checks so the self-hosted Runner is not queued twice.
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 rust_verify:
   stage: test
@@ -50,6 +51,11 @@ rust_verify:
       - Cargo.lock
   script:
     - rustc --version
+    - test -n "$CI_RUNNER_ID" && test -n "$CI_COMMIT_SHA"
+    - sh -n tests/fixtures/generate.sh
+    - sh -n tests/integration/smoke.sh
+    - sh -n tests/integration/hls.sh
+    - bash -n scripts/benchmark_m5.sh
     # Temporary diagnostic formatting in job workspace; source formatting is a follow-up commit.
     - cargo fmt --all
     - git diff --check
