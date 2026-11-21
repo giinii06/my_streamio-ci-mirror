@@ -1,3 +1,10 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
+
 stages:
   - smoke
   - test
@@ -24,6 +31,19 @@ rust_verify:
   image: rust:1.100.0-bookworm
   variables:
     CARGO_TERM_COLOR: never
+    CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+    CARGO_INCREMENTAL: "0"
+  cache:
+    key: "my-streamio-rust100-arm64-v1"
+    paths:
+      - .cargo/registry/
+      - target/
+    policy: pull-push
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - Cargo.lock
   script:
     - rustc --version
     # Temporary diagnostic formatting in job workspace; source formatting is a follow-up commit.

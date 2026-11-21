@@ -188,6 +188,7 @@ impl TorrentBackend {
         let mut stream = self
             .api
             .api_stream(TorrentIdOrHash::Id(torrent_id), file_id)
+            .await
             .context("cannot open torrent file stream")?;
         let read = async {
             stream.seek(SeekFrom::Start(offset)).await?;
