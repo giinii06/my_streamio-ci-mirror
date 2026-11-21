@@ -2,6 +2,8 @@
 //! video/audio match anchors. Actual perceptual fingerprint extraction is
 //! separate; these fit checks must not be replaced with duration matching.
 
+pub mod fingerprint;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
