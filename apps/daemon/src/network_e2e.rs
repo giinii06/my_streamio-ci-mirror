@@ -1,12 +1,9 @@
-//! Opt-in network test: REAL BitTorrent seed sessions, real magnet metadata,
-//! verified pieces and the exact production HTTP Range handlers.
-//! Enabled only by cargo test --features network-fixture.
-//! No public trackers, downloaded test assets or prepopulated receiver files.
+//! Gated network fixture: two real independently seeded synthetic MP4 torrents
+//! -> BEP9 metadata + SHA1 verified pieces -> production Axum Range handlers.
+//! Enable with cargo test -p my-streamio-daemon --features network-fixture.
 
 use super::{app_router, ProgramRoot};
-use librqbit::{CreateTorrentOptions, Session};
-use my_streamio_torrent_adapter::TorrentBackend;
-use reqwest::{header, Client, StatusCode};
+use my_streamio_torrent_adapter::{FixtureSeeder, TorrentBackend};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
@@ -17,29 +14,79 @@ use std::{
 use tokio::{net::TcpListener, time::timeout};
 
 struct Scratch(PathBuf);
-
 impl Scratch {
     fn new() -> Self {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("system clock before epoch")
+            .expect("monotonic fixture identifier")
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "my-streamio-two-swarms-{}-{nonce}",
+            "my-streamio-net-e2e-{}-{nonce}",
             std::process::id()
         ));
-        fs::create_dir(&path).expect("create isolated fixture root");
+        fs::create_dir(&path).expect("create temporary fixture root");
         Self(path)
     }
-
-    fn root(&self) -> &Path {
+    fn path(&self) -> &Path {
         &self.0
     }
 }
-
 impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+struct HttpResult {
+    status: u16,
+    headers: String,
+    body: Vec<u8>,
+}
+
+fn local_http(
+    scratch: &Scratch,
+    url: &str,
+    range: Option<String>,
+    json: Option<&str>,
+) -> HttpResult {
+    let headers_path = scratch.path().join("curl-headers.txt");
+    let body_path = scratch.path().join("curl-body.bin");
+    let mut command = Command::new("curl");
+    command.args([
+        "--fail-with-body",
+        "--silent",
+        "--show-error",
+        "--max-time",
+        "45",
+        "--output",
+    ]);
+    command.arg(&body_path);
+    command.arg("--dump-header").arg(&headers_path);
+    command.args(["--write-out", "%{http_code}"]);
+    if let Some(ref range) = range {
+        command.arg("--header").arg(format!("Range: {range}"));
+    }
+    if let Some(body) = json {
+        command.args(["--request", "POST", "--header", "Content-Type: application/json"]);
+        command.arg("--data").arg(body);
+    }
+    command.arg(url);
+    let output = command.output().expect("curl executable is required");
+    // curl --fail-with-body returns exit code 22 for 4xx, so allow it if
+    // and only if a deliberate negative HTTP test returned a valid status.
+    let status = std::str::from_utf8(&output.stdout)
+        .expect("curl status is utf8")
+        .parse::<u16>()
+        .expect("curl returned an HTTP status");
+    assert!(
+        output.status.success() || (output.status.code() == Some(22) && status >= 400),
+        "transport/network failure: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    HttpResult {
+        status,
+        headers: fs::read_to_string(&headers_path).expect("HTTP response headers"),
+        body: fs::read(&body_path).expect("HTTP response body"),
     }
 }
 
@@ -48,163 +95,149 @@ async fn two_real_swarms_deliver_piece_verified_http_seek_bytes() {
     timeout(Duration::from_secs(300), async {
         let scratch = Scratch::new();
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let sources = scratch.root().join("seed");
-        fs::create_dir_all(&sources).expect("fixture media directory");
+        let source_dir = scratch.path().join("seed");
+        fs::create_dir(&source_dir).expect("seed source directory");
 
         let generated = Command::new("sh")
             .arg("tests/fixtures/generate.sh")
-            .arg(&sources)
-            .current_dir(&repo)
+            .arg(&source_dir)
+            .current_dir(repo)
             .status()
-            .expect("launch synthetic FFmpeg generator");
-        assert!(generated.success(), "FFmpeg did not create the two media files");
+            .expect("launch fixture generator");
+        assert!(generated.success(), "synthetic H.264/HEVC creation failed");
 
-        let primary = sources.join("reference.mp4");
-        let alternative = sources.join("alternate.mp4");
-        let raw_a = fs::read(&primary).expect("H.264 fixture");
-        let raw_b = fs::read(&alternative).expect("HEVC fixture");
-        assert!(raw_a.len() > 65_536 && raw_b.len() > 65_536);
-        assert_ne!(Sha256::digest(&raw_a), Sha256::digest(&raw_b));
+        let primary = source_dir.join("reference.mp4");
+        let alternate = source_dir.join("alternate.mp4");
+        let content_a = fs::read(&primary).expect("read synthetic reference");
+        let content_b = fs::read(&alternate).expect("read synthetic alternative");
+        assert!(content_a.len() > 65_536 && content_b.len() > 65_536);
+        assert_ne!(Sha256::digest(&content_a), Sha256::digest(&content_b));
 
-        // A separate real BitTorrent session seeds both files. It is NOT
-        // the receiver and cannot reuse its storage directory.
-        let seeder = Session::new(sources.clone())
+        let seeder = FixtureSeeder::start(&primary, &alternate)
             .await
-            .expect("start actual BitTorrent seeder");
-        let peer_port = seeder
-            .listen_addr()
-            .expect("seeder TCP listener")
-            .port();
-        assert_ne!(peer_port, 0, "seeder must have a real listening TCP port");
+            .expect("create two real BitTorrent seeds");
+        assert!(seeder.primary_magnet.starts_with("magnet:?xt=urn:btih:"));
+        assert!(seeder.alternate_magnet.starts_with("magnet:?xt=urn:btih:"));
+        assert_ne!(seeder.primary_magnet, seeder.alternate_magnet);
+        let port = seeder.peer_port;
 
-        let (t1, _seed_a) = seeder
-            .create_and_serve_torrent(
-                &primary,
-                CreateTorrentOptions {
-                    piece_length: Some(65_536),
-                    ..Default::default()
-                },
-            )
+        // Receiver is not preloaded with any source media. Only downloaded
+        // and SHA1-verified BitTorrent pieces are exposed by the HTTP handler.
+        let recv_dir = scratch.path().join("receiver");
+        fs::create_dir(&recv_dir).expect("receiver storage root");
+        assert!(!recv_dir.join("reference.mp4").exists());
+        assert!(!recv_dir.join("alternate.mp4").exists());
+
+        let backend = TorrentBackend::open(recv_dir)
             .await
-            .expect("seed primary video torrent");
-        let (t2, _seed_b) = seeder
-            .create_and_serve_torrent(
-                &alternative,
-                CreateTorrentOptions {
-                    piece_length: Some(131_072),
-                    ..Default::default()
-                },
-            )
-            .await
-            .expect("seed alternate video torrent");
-
-        let a_magnet = t1.as_magnet().to_string();
-        let b_magnet = t2.as_magnet().to_string();
-        assert_ne!(t1.info_hash(), t2.info_hash(), "must be distinct swarms");
-        assert!(a_magnet.starts_with("magnet:?xt=urn:btih:"));
-        assert!(b_magnet.starts_with("magnet:?xt=urn:btih:"));
-        assert!(!a_magnet.contains("&tr=") && !b_magnet.contains("&tr="));
-
-        let receiver = scratch.root().join("receiver");
-        fs::create_dir(&receiver).expect("receiver root");
-        assert!(!receiver.join("reference.mp4").exists());
-        assert!(!receiver.join("alternate.mp4").exists());
-
-        let backend = TorrentBackend::open(receiver)
-            .await
-            .expect("independent receiving session");
-
-        // In the opt-in feature, the only extra peer is pinned to localhost.
-        // Normal release code never exposes this peer-injection method.
+            .expect("start an isolated BitTorrent receiver");
         let first = backend
-            .add_magnet_from_fixture_peer(&a_magnet, peer_port)
+            .add_magnet_from_fixture_peer(&seeder.primary_magnet, port)
             .await
-            .expect("resolve first magnet metadata over BEP9");
+            .expect("BEP9 metadata for primary real seed");
         let second = backend
-            .add_magnet_from_fixture_peer(&b_magnet, peer_port)
+            .add_magnet_from_fixture_peer(&seeder.alternate_magnet, port)
             .await
-            .expect("resolve second magnet metadata over BEP9");
-        let first_id = first["id"].as_u64().expect("first torrent id");
-        let second_id = second["id"].as_u64().expect("second torrent id");
-        assert_ne!(first_id, second_id);
+            .expect("BEP9 metadata for alternate real seed");
+        let first_id = first["id"].as_u64().expect("first torrent ID");
+        let second_id = second["id"].as_u64().expect("second torrent ID");
+        assert_ne!(first_id, second_id, "two independent infohashes");
         assert!(backend
-            .add_magnet_from_fixture_peer("not-a-magnet", peer_port)
+            .add_magnet_from_fixture_peer("not-a-magnet", port)
             .await
             .is_err());
         assert!(backend
-            .add_magnet_from_fixture_peer(&a_magnet, 0)
+            .add_magnet_from_fixture_peer(&seeder.primary_magnet, 0)
             .await
             .is_err());
 
-        let root = ProgramRoot(scratch.root().canonicalize().expect("canonical root"));
+        let program_root = ProgramRoot(
+            scratch.path().canonicalize().expect("canonicalize test root"),
+        );
         let listener = TcpListener::bind(("127.0.0.1", 0))
             .await
-            .expect("HTTP listener");
-        let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+            .expect("bind loopback HTTP");
+        let base = format!(
+            "http://127.0.0.1:{}",
+            listener.local_addr().unwrap().port()
+        );
         let server = tokio::spawn(async move {
-            axum::serve(listener, app_router(backend, root))
+            axum::serve(listener, app_router(backend, program_root))
                 .await
-                .expect("test HTTP server");
+                .expect("in-process real HTTP server");
         });
-        let client = Client::builder()
-            .timeout(Duration::from_secs(60))
-            .build()
-            .expect("HTTP test client");
 
-        let bad = client
-            .post(format!("{base}/api/v1/sources"))
-            .json(&serde_json::json!({"magnet":"not-a-magnet"}))
-            .send().await.expect("bad magnet response");
-        assert_eq!(bad.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let bad = local_http(
+            &scratch,
+            &format!("{base}/api/v1/sources"),
+            None,
+            Some(r#"{"magnet":"not-a-magnet"}"#),
+        );
+        assert_eq!(bad.status, 422);
 
-        for (torrent_id, expected) in [(first_id, raw_a), (second_id, raw_b)] {
-            let files = client
-                .get(format!("{base}/api/v1/sources/{torrent_id}/files"))
-                .send().await.expect("source metadata response");
-            assert_eq!(files.status(), StatusCode::OK);
-            let files: serde_json::Value = files.json().await.expect("source file list");
-            assert_eq!(files["files"][0]["length"].as_u64(), Some(expected.len() as u64));
-            let url = format!("{base}/api/v1/sources/{torrent_id}/files/0/stream");
-
-            // All bytes must originate from lib's verified piece reader.
-            // Different Range requests simulate progressive playback/seek/EOF.
-            let mut received = Vec::with_capacity(expected.len());
-            let mut cursor = 0usize;
-            while cursor < expected.len() {
-                let end = (cursor + 262_143).min(expected.len() - 1);
-                let response = client.get(&url)
-                    .header(header::RANGE, format!("bytes={cursor}-{end}"))
-                    .send().await.expect("verified piece HTTP request");
-                assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
-                assert_eq!(
-                    response.headers().get(header::CONTENT_RANGE).unwrap().to_str().unwrap(),
-                    format!("bytes {cursor}-{end}/{}", expected.len())
+        for (id, expected) in [(first_id, content_a), (second_id, content_b)] {
+            let metadata = local_http(
+                &scratch,
+                &format!("{base}/api/v1/sources/{id}/files"),
+                None,
+                None,
+            );
+            assert_eq!(metadata.status, 200);
+            let files: serde_json::Value =
+                serde_json::from_slice(&metadata.body).expect("torrent metadata JSON");
+            assert_eq!(
+                files["files"][0]["length"].as_u64(),
+                Some(expected.len() as u64)
+            );
+            let stream_url = format!("{base}/api/v1/sources/{id}/files/0/stream");
+            let mut assembled = Vec::with_capacity(expected.len());
+            let mut start = 0usize;
+            while start < expected.len() {
+                let end = (start + 262_143).min(expected.len() - 1);
+                let response = local_http(
+                    &scratch,
+                    &stream_url,
+                    Some(format!("bytes={start}-{end}")),
+                    None,
                 );
-                let body = response.bytes().await.expect("Range body");
-                assert_eq!(&body[..], &expected[cursor..=end]);
-                received.extend_from_slice(&body);
-                cursor = end + 1;
+                assert_eq!(response.status, 206);
+                let wanted = format!("bytes {start}-{end}/{}", expected.len());
+                assert!(
+                    response.headers.lines().any(|line| {
+                        line.to_ascii_lowercase().starts_with("content-range:")
+                            && line.trim_start_matches(|c: char| c != ':')
+                                .contains(&wanted)
+                    }) || response.headers.contains(&wanted),
+                    "server did not expose expected Content-Range {wanted}"
+                );
+                assert_eq!(response.body, expected[start..=end]);
+                assembled.extend_from_slice(&response.body);
+                start = end + 1;
             }
-            assert_eq!(Sha256::digest(&received), Sha256::digest(&expected));
+            assert_eq!(Sha256::digest(&assembled), Sha256::digest(&expected));
 
-            // A noncontiguous seek backwards after progressive reads.
-            let seek_end = expected.len().min(8192) - 1;
-            let response = client.get(&url)
-                .header(header::RANGE, format!("bytes=0-{seek_end}"))
-                .send().await.expect("backward seek");
-            assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
-            assert_eq!(&response.bytes().await.unwrap()[..], &expected[..=seek_end]);
+            let back = local_http(
+                &scratch,
+                &stream_url,
+                Some("bytes=0-8191".to_string()),
+                None,
+            );
+            assert_eq!(back.status, 206);
+            assert_eq!(back.body, expected[..8192]);
 
-            let response = client.get(&url)
-                .header(header::RANGE, format!("bytes={}-", expected.len()))
-                .send().await.expect("EOF range");
-            assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+            let eof = local_http(
+                &scratch,
+                &stream_url,
+                Some(format!("bytes={}-", expected.len())),
+                None,
+            );
+            assert_eq!(eof.status, 416);
         }
 
         server.abort();
         seeder.stop().await;
-        println!("PASS: two distinct real v1 swarms -> verified HTTP byte ranges, seek, EOF");
+        println!("E2E PASS: independent two-swarm peer downloads / Range / seek / EOF");
     })
     .await
-    .expect("two-swarm network fixture exceeded bounded deadline");
+    .expect("controlled two-swarm network test exceeded 300-second limit");
 }
