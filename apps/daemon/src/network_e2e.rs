@@ -283,9 +283,62 @@ async fn two_real_swarms_deliver_piece_verified_http_seek_bytes() {
             assert_eq!(eof.status, 416);
         }
 
-        server.abort();
+        // This receiver has its own empty storage and resolves only torrent
+        // metadata. The paused flag prevents payload pieces from arriving.
+        let offline_backend = TorrentBackend::open(scratch.path().join("offline-receiver"))
+            .await
+            .expect("open independent empty receiver");
+        let offline_source = offline_backend
+            .add_magnet_from_fixture_peer(&seeder.primary_magnet, port, true)
+            .await
+            .expect("resolve peer metadata without downloading pieces");
+        let offline_id = offline_source["id"]
+            .as_u64()
+            .expect("paused receiver torrent id") as usize;
+        let offline_files = offline_backend
+            .files(offline_id)
+            .expect("paused receiver must have metadata");
+        assert_eq!(
+            offline_files[0].length,
+            fs::metadata(&primary).expect("read primary fixture metadata").len()
+        );
+
+        let offline_listener = TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind offline receiver HTTP listener");
+        let offline_base = format!(
+            "http://127.0.0.1:{}",
+            offline_listener.local_addr().unwrap().port()
+        );
+        let offline_root = ProgramRoot(
+            scratch.path().canonicalize().expect("canonicalize offline root"),
+        );
+        let offline_server = tokio::spawn(async move {
+            axum::serve(offline_listener, app_router(offline_backend, offline_root))
+                .await
+                .expect("serve offline receiver API");
+        });
+
+        // With the only seeder gone, no valid pieces can become available.
         seeder.stop().await;
-        println!("E2E PASS: independent two-swarm peer downloads / Range / seek / EOF");
+        let unavailable = local_http(
+            &scratch,
+            &format!("{offline_base}/api/v1/sources/{offline_id}/files/0/stream"),
+            Some("bytes=0-1023".to_string()),
+            None,
+        );
+        assert_eq!(unavailable.status, 503, "missing peer/pieces must fail closed");
+        assert_eq!(unavailable.body, b"Verified bytes not ready");
+        assert!(
+            !unavailable
+                .headers
+                .to_ascii_lowercase()
+                .contains("content-range:"),
+            "failed streaming must not advertise playable media ranges"
+        );
+        offline_server.abort();
+        server.abort();
+        println!("E2E PASS: two real swarms, decoded media, and unavailable-peer fail-closed");
     })
     .await
     .expect("controlled two-swarm network test exceeded 300-second limit");

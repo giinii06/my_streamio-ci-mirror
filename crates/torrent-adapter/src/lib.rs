@@ -149,7 +149,7 @@ impl TorrentBackend {
         {
             let port = self.fixture_peer_port.load(Ordering::SeqCst);
             if port != 0 {
-                return self.add_magnet_from_fixture_peer(magnet, port).await;
+                return self.add_magnet_from_fixture_peer(magnet, port, false).await;
             }
         }
         self.add_magnet_with_options(magnet, None).await
@@ -171,6 +171,7 @@ impl TorrentBackend {
         &self,
         magnet: &str,
         fixture_port: u16,
+        paused: bool,
     ) -> Result<Value> {
         if fixture_port == 0 {
             bail!("fixture peer must use a nonzero TCP port");
@@ -179,6 +180,7 @@ impl TorrentBackend {
         self.add_magnet_with_options(
             magnet,
             Some(AddTorrentOptions {
+                paused,
                 initial_peers: Some(vec![peer]),
                 disable_trackers: true,
                 ..Default::default()
