@@ -92,6 +92,11 @@ fn local_http(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_real_swarms_deliver_piece_verified_http_seek_bytes() {
+    // RED/green CI execution probe: this branch is intentionally invalid
+    // ONLY until its GitHub callback is recorded; remove in next commit.
+    if std::env::var_os("ALCHEMY_NETWORK_E2E_PROBE_BYPASS").is_none() {
+        panic!("ALCHEMY_NETWORK_E2E_ACTUALLY_EXECUTED");
+    }
     timeout(Duration::from_secs(300), async {
         let scratch = Scratch::new();
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
