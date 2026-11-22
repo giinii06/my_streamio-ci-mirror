@@ -281,6 +281,40 @@ async fn two_real_swarms_deliver_piece_verified_http_seek_bytes() {
                 None,
             );
             assert_eq!(eof.status, 416);
+            let wanted_unsatisfied = format!("bytes */{}", expected.len());
+            assert!(
+                eof.headers.lines().any(|line| {
+                    line.split_once(':').is_some_and(|(name, value)| {
+                        name.eq_ignore_ascii_case("content-range")
+                            && value.trim() == wanted_unsatisfied
+                    })
+                }),
+                "416 must disclose representation size for client recovery"
+            );
+
+            let suffix = local_http(
+                &scratch,
+                &stream_url,
+                Some("bytes=-1024".to_string()),
+                None,
+            );
+            assert_eq!(suffix.status, 206, "last 1024 bytes must be seekable");
+            assert_eq!(suffix.body, expected[expected.len() - 1024..]);
+            let wanted_suffix = format!(
+                "bytes {}-{}/{}",
+                expected.len() - 1024,
+                expected.len() - 1,
+                expected.len()
+            );
+            assert!(
+                suffix.headers.lines().any(|line| {
+                    line.split_once(':').is_some_and(|(name, value)| {
+                        name.eq_ignore_ascii_case("content-range")
+                            && value.trim() == wanted_suffix
+                    })
+                }),
+                "suffix response must have correct Content-Range"
+            );
         }
 
         // This receiver has its own empty storage and resolves only torrent

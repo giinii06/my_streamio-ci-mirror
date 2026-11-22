@@ -242,6 +242,31 @@ mod tests {
     }
 
     #[test]
+    fn http_suffix_ranges_target_the_end_of_the_file() {
+        assert_eq!(
+            parse_http_range("bytes=-1", 100).unwrap(),
+            ByteRange::new(99, 100).unwrap()
+        );
+        assert_eq!(
+            parse_http_range("bytes=-20", 100).unwrap(),
+            ByteRange::new(80, 100).unwrap()
+        );
+        assert_eq!(
+            parse_http_range("bytes=-200", 100).unwrap(),
+            ByteRange::new(0, 100).unwrap()
+        );
+    }
+
+    #[test]
+    fn http_suffix_range_rejects_zero_overflow_and_empty_files() {
+        assert!(parse_http_range("bytes=-0", 100).is_err());
+        assert!(parse_http_range("bytes=-", 100).is_err());
+        assert!(parse_http_range("bytes=-18446744073709551616", 100).is_err());
+        assert!(parse_http_range("bytes=-20", 0).is_err());
+        assert!(parse_http_range("bytes=-3,5-6", 100).is_err());
+    }
+
+    #[test]
     fn seek_invalidates_stale_completed_segments() {
         let mut cursor = PlaybackCursor::default();
         assert!(cursor.accepts_result(0));
