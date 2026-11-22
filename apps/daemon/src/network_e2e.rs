@@ -190,7 +190,7 @@ async fn two_real_swarms_deliver_piece_verified_http_seek_bytes() {
         let second_id = second["id"].as_u64().expect("second torrent ID");
         assert_ne!(first_id, second_id, "independent torrent admissions");
 
-        for (id, expected) in [(first_id, content_a), (second_id, content_b)] {
+        for (id, expected, codec) in [(first_id, content_a, "h264"), (second_id, content_b, "hevc")] {
             let metadata = local_http(
                 &scratch,
                 &format!("{base}/api/v1/sources/{id}/files"),
@@ -219,17 +219,51 @@ async fn two_real_swarms_deliver_piece_verified_http_seek_bytes() {
                 let wanted = format!("bytes {start}-{end}/{}", expected.len());
                 assert!(
                     response.headers.lines().any(|line| {
-                        line.to_ascii_lowercase().starts_with("content-range:")
-                            && line.trim_start_matches(|c: char| c != ':')
-                                .contains(&wanted)
-                    }) || response.headers.contains(&wanted),
-                    "server did not expose expected Content-Range {wanted}"
+                        line.split_once(':').is_some_and(|(name, value)| {
+                            name.eq_ignore_ascii_case("content-range") && value.trim() == wanted
+                        })
+                    }),
+                    "server did not expose exact Content-Range {wanted}"
                 );
                 assert_eq!(response.body, expected[start..=end]);
                 assembled.extend_from_slice(&response.body);
                 start = end + 1;
             }
             assert_eq!(Sha256::digest(&assembled), Sha256::digest(&expected));
+
+            // A byte-perfect transfer is not yet proof of playable media:
+            // independently identify and completely decode the bytes that
+            // travelled through both real BitTorrent and the HTTP API.
+            let reconstructed = scratch.path().join(format!("received-{id}.mp4"));
+            fs::write(&reconstructed, &assembled)
+                .expect("persist reconstructed peer-delivered MP4");
+            let probe = Command::new("ffprobe")
+                .args([
+                    "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream=codec_name",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                ])
+                .arg(&reconstructed)
+                .output()
+                .expect("launch FFprobe against downloaded video");
+            assert!(
+                probe.status.success(),
+                "downloaded video metadata probe failed: {}",
+                String::from_utf8_lossy(&probe.stderr)
+            );
+            assert_eq!(String::from_utf8_lossy(&probe.stdout).trim(), codec);
+            let decode = Command::new("ffmpeg")
+                .args(["-hide_banner", "-v", "error", "-nostdin", "-xerror", "-i"])
+                .arg(&reconstructed)
+                .args(["-map", "0", "-f", "null", "-"])
+                .output()
+                .expect("launch full decode of peer-delivered video and audio");
+            assert!(
+                decode.status.success(),
+                "full downloaded media decode failed: {}",
+                String::from_utf8_lossy(&decode.stderr)
+            );
 
             let back = local_http(
                 &scratch,

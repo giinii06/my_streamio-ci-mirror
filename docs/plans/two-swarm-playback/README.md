@@ -16,12 +16,16 @@ Use `librqbit::Session::create_and_serve_torrent` to seed legally generated fixt
 
 | Phase | Current | Implemented | Tested | Committed |
 |---|---|---|---|---|
-| 01 plan + deterministic local seed fixture | not_started | no | no | no |
-| 02 connect live downloader and validate positive/negative Range | not_started | no | no | no |
-| 03 run GitHub Actions exact SHA and review | not_started | no | no | no |
+| 01 plan + deterministic local seed fixture | implemented | yes | indirect provider proof only | yes |
+| 02 connect live downloader and validate positive/negative Range | implemented | yes | indirect provider proof only | yes |
+| 03 run GitHub Actions exact SHA and review | in_progress | yes | RED/GREEN callback evidence; jobs not directly inspected | yes |
 
 Append-only log:
 - `not_started` — plan created before implementation at source baseline `ad3bf77f6a45edc03ce99999b32d8d1f07452d6e`.
+- `phase-01: not_started → in_progress → implemented` — code committed for distinct loopback-seeded synthetic swarms, actual job traces unavailable.
+- `phase-02: not_started → in_progress → implemented` — HTTP magnet admission and piece-verified Range/seek/EOF test committed, actual job traces unavailable.
+- `phase-03: not_started → in_progress` — external RED/GREEN HLS script probe ran; provider callbacks matched source SHA, individual GitHub job logs remain unverified.
+- Video decode assertions added as a new untested candidate; do not mark verified until the new SHA's provider result is observed.
 
 ## Acceptance gates
 
