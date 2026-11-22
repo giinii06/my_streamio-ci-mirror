@@ -1,4 +1,7 @@
 #!/bin/sh
+# ALCHEMY CI PROBE - deliberately fails if this HLS job is actually invoked.
+echo 'ALCHEMY_REQUIRED_HLS_JOB_PROBE_EXECUTED' >&2
+exit 93
 # Verifies a real 9-second HLS output that uses HEVC video for seconds 3..6
 # and H.264 for the other slices, with primary-source audio throughout.
 set -eu
