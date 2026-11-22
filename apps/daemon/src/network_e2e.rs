@@ -327,9 +327,6 @@ async fn two_real_swarms_deliver_piece_verified_http_seek_bytes() {
             Some("bytes=0-1023".to_string()),
             None,
         );
-        // Temporary RED probe: prove the unavailable-peer assertion is reached by CI.
-        // This deliberately fails and MUST be removed after the failed provider result.
-        panic!("ALCHEMY_UNAVAILABLE_PEER_503_ASSERTION_REACHED");
         assert_eq!(unavailable.status, 503, "missing peer/pieces must fail closed");
         assert_eq!(unavailable.body, b"Verified bytes not ready");
         assert!(
