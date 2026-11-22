@@ -113,8 +113,18 @@ async fn stream_source_file(
         Some(request) => match parse_http_range(request, total) {
             Ok(range) => range,
             Err(_) => {
-                return (StatusCode::RANGE_NOT_SATISFIABLE, "Unsupported byte Range")
-                    .into_response()
+                let mut response = (
+                    StatusCode::RANGE_NOT_SATISFIABLE,
+                    "Unsupported byte Range",
+                )
+                    .into_response();
+                if let Ok(value) = HeaderValue::from_str(&format!("bytes */{total}")) {
+                    response.headers_mut().insert(header::CONTENT_RANGE, value);
+                }
+                response
+                    .headers_mut()
+                    .insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+                return response;
             }
         },
         None => match ByteRange::new(0, total.min(MAX_HTTP_CHUNK as u64)) {

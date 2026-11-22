@@ -115,8 +115,8 @@ pub fn map_to_pieces(
         .collect())
 }
 
-/// Parser for one RFC 7233-style "bytes=start-end" request.
-/// Multiple/suffix ranges are explicitly unsupported rather than silently misread.
+/// Parser for a single RFC 9110 byte range, including suffix seeks.
+/// Multipart ranges are explicitly unsupported rather than silently misread.
 pub fn parse_http_range(header: &str, length: u64) -> Result<ByteRange, &'static str> {
     let data = header
         .strip_prefix("bytes=")
@@ -125,8 +125,23 @@ pub fn parse_http_range(header: &str, length: u64) -> Result<ByteRange, &'static
         return Err("multipart byte ranges are unsupported");
     }
     let (start, end) = data.split_once('-').ok_or("invalid range")?;
-    if start.is_empty() || length == 0 {
-        return Err("suffix byte ranges unsupported");
+    if length == 0 {
+        return Err("cannot satisfy byte range for empty representation");
+    }
+    if start.is_empty() {
+        if !end.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err("invalid suffix byte range");
+        }
+        let suffix_length = end.parse::<u64>().map_err(|_| "invalid suffix length")?;
+        if suffix_length == 0 {
+            return Err("suffix length must be positive");
+        }
+        return ByteRange::new(length.saturating_sub(suffix_length), length);
+    }
+    if !start.bytes().all(|byte| byte.is_ascii_digit())
+        || (!end.is_empty() && !end.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        return Err("invalid byte range digits");
     }
     let start = start.parse::<u64>().map_err(|_| "invalid range start")?;
     let last_inclusive = if end.is_empty() {
@@ -236,7 +251,10 @@ mod tests {
             parse_http_range("bytes=95-", 100).unwrap(),
             ByteRange::new(95, 100).unwrap()
         );
-        assert!(parse_http_range("bytes=-5", 100).is_err());
+        assert_eq!(
+            parse_http_range("bytes=-5", 100).unwrap(),
+            ByteRange::new(95, 100).unwrap()
+        );
         assert!(parse_http_range("bytes=3-2", 100).is_err());
         assert!(parse_http_range("bytes=1-4,5-8", 100).is_err());
     }
